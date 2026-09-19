@@ -5,6 +5,8 @@ import { getSocket } from "../../lib/socket";
 import { formatClp, formatPatente } from "../../lib/format";
 import { LiveMap } from "../../components/LiveMap";
 import { AdBanner } from "../../components/AdBanner";
+import { ManualModal } from "../../components/ManualModal";
+import { PASAJERO_MANUAL } from "../../lib/manuals";
 
 interface Landmark {
   code: string;
@@ -78,7 +80,31 @@ export function PasajeroApp() {
   const [riderPhone, setRiderPhone] = useState("");
   const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
   const [myGeo, setMyGeo] = useState<{ lat: number; lng: number } | null>(null);
+  const [showManual, setShowManual] = useState(false);
   const pollRef = useRef<number | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const lastGeocodedRef = useRef<{ lat: number; lng: number; at: number } | null>(null);
+  const [originLoading, setOriginLoading] = useState(false);
+
+  // GPS se activa apenas abre la app y queda persistente (watchPosition) mientras la app
+  // esté abierta, no solo una foto única al montar. El navegador recuerda el permiso una
+  // vez otorgado, así que esto no vuelve a preguntar si el usuario ya dijo que sí antes.
+  function requestGps() {
+    if (!navigator.geolocation) {
+      setGpsStatus("unsupported");
+      return;
+    }
+    setGpsStatus("pending");
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        setMyGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsStatus("active");
+      },
+      () => setGpsStatus("denied"),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 8000 }
+    );
+  }
 
   useEffect(() => {
     if (!user || user.role !== "PASSENGER") {
@@ -98,34 +124,53 @@ export function PasajeroApp() {
       .then((d) => setCancelFeeClp(d.cancellationFeePassengerClp))
       .catch(() => {});
 
-    // GPS se activa apenas abre la app, no espera a que el pasajero pida un viaje.
-    if (!navigator.geolocation) {
-      setGpsStatus("unsupported");
-    } else {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setMyGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setGpsStatus("active");
-        },
-        () => setGpsStatus("denied"),
-        { timeout: 6000 }
-      );
-    }
+    requestGps();
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    };
   }, []);
 
+  // Punto de partida estilo Uber: la dirección real detectada por GPS, no un
+  // landmark fijo. Nominatim (OpenStreetMap) es gratis y sin API key, pero su
+  // política de uso pide no golpearlo seguido — por eso se debounce por
+  // distancia (>120 m) y tiempo (>20 s) desde la última consulta.
   useEffect(() => {
-    if (!myGeo || landmarks.length === 0) return;
-    let nearest = landmarks[0];
-    let nearestDistKm = haversineKm(myGeo, landmarks[0]);
-    for (const l of landmarks) {
-      const d = haversineKm(myGeo, l);
-      if (d < nearestDistKm) {
-        nearest = l;
-        nearestDistKm = d;
-      }
+    if (!myGeo) return;
+    geocodeAndSetOrigin(myGeo);
+  }, [myGeo]);
+
+  // Botón estilo Uber (target sobre el mapa) para forzar una relectura de GPS
+  // + dirección al toque, saltándose el debounce normal.
+  function refreshGps() {
+    lastGeocodedRef.current = null;
+    requestGps();
+  }
+
+  async function geocodeAndSetOrigin(geo: { lat: number; lng: number }) {
+    const last = lastGeocodedRef.current;
+    const now = Date.now();
+    if (last && haversineKm(last, geo) < 0.12 && now - last.at < 20000) return;
+    lastGeocodedRef.current = { ...geo, at: now };
+    setOriginLoading(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${geo.lat}&lon=${geo.lng}&zoom=17&addressdetails=1`,
+        { headers: { Accept: "application/json" } }
+      );
+      const data = await res.json();
+      const a = data?.address ?? {};
+      const road = a.road || a.pedestrian || a.residential || a.hamlet || a.village || a.suburb;
+      const locality = a.town || a.city || a.municipality || a.county || "";
+      const label = road
+        ? `${road}${locality ? ", " + locality : ""}`
+        : data?.display_name?.split(",").slice(0, 2).join(",") ?? "Tu ubicación actual";
+      setOrigin({ code: "MI_UBICACION", name: label, lat: geo.lat, lng: geo.lng, note: "Ubicación GPS real" });
+    } catch {
+      // Sin conexión a Nominatim: no rompemos el flujo, se mantiene el origen anterior.
+    } finally {
+      setOriginLoading(false);
     }
-    if (nearestDistKm <= 6) setOrigin(nearest);
-  }, [myGeo, landmarks]);
+  }
 
   useEffect(() => {
     if (!tripId || screen !== "tracking") return;
@@ -273,11 +318,9 @@ export function PasajeroApp() {
           <span className="font-extrabold tracking-tight text-lg">CabrasGo</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          {gpsStatus === "denied" && (
-            <span className="text-[10px] font-bold text-cg-danger bg-red-50 px-2 py-1 rounded-full" title="Activa la ubicación para detectar tu punto de partida automáticamente">
-              GPS desactivado
-            </span>
-          )}
+          <button onClick={() => setShowManual(true)} aria-label="Manual de uso" title="Manual de uso" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
+            📘
+          </button>
           <span className="text-slate-500 font-medium">{user.firstName}</span>
           <button onClick={logout} className="text-cg-danger font-semibold">
             Salir
@@ -293,6 +336,8 @@ export function PasajeroApp() {
             <AdBanner ads={ads} />
             <HomeScreen
               origin={origin}
+              originLoading={originLoading}
+              onRefreshGps={refreshGps}
               landmarks={landmarks}
               quickAccess={quickAccess}
               onPick={getQuote}
@@ -357,12 +402,48 @@ export function PasajeroApp() {
           </div>
         )}
       </main>
+
+      {(gpsStatus === "denied" || gpsStatus === "unsupported") && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center shadow-2xl">
+            <div className="text-5xl mb-3">📍</div>
+            <p className="text-lg font-extrabold mb-2">Activa tu ubicación para continuar</p>
+            <p className="text-sm text-slate-500 mb-5">
+              {gpsStatus === "unsupported"
+                ? "Este dispositivo o navegador no puede compartir tu ubicación. Probá desde otro celular o actualizá tu navegador para pedir un viaje."
+                : "CabrasGo necesita tu ubicación para calcular tu punto de partida y encontrar conductores cerca tuyo. Sin GPS activo no podés pedir un viaje."}
+            </p>
+            {gpsStatus === "denied" && (
+              <button
+                onClick={requestGps}
+                className="w-full bg-cg-accent text-white rounded-xl py-3.5 font-bold active:scale-95 transition-all duration-150"
+              >
+                Activar ubicación
+              </button>
+            )}
+            <p className="text-[11px] text-slate-400 mt-3">
+              Si tu navegador ya bloqueó el permiso, tocá el ícono de candado junto a la dirección del sitio, habilitá "Ubicación" y volvé a tocar el botón.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {showManual && (
+        <ManualModal
+          title="Manual de uso"
+          subtitle="CabrasGo Pasajero"
+          sections={PASAJERO_MANUAL}
+          onClose={() => setShowManual(false)}
+        />
+      )}
     </div>
   );
 }
 
 function HomeScreen({
   origin,
+  originLoading,
+  onRefreshGps,
   landmarks,
   quickAccess,
   onPick,
@@ -374,6 +455,8 @@ function HomeScreen({
   setRiderPhone,
 }: {
   origin: Landmark | null;
+  originLoading: boolean;
+  onRefreshGps: () => void;
   landmarks: Landmark[];
   quickAccess: Landmark[];
   onPick: (l: Landmark) => void;
@@ -391,21 +474,43 @@ function HomeScreen({
     ? landmarks.filter((l) => l.code !== origin?.code && l.name.toLowerCase().includes(normalized))
     : landmarks.filter((l) => l.code !== origin?.code);
 
+  const originIsGps = origin?.code === "MI_UBICACION";
+  const mapMarkers = origin
+    ? [{ id: origin.code, lat: origin.lat, lng: origin.lng, label: origin.name, kind: originIsGps ? ("me" as const) : undefined }]
+    : [];
+
   return (
     <div>
-      <div className="mb-4">
-        <LiveMap
-          center={origin ? [origin.lat, origin.lng] : [-34.2917, -71.3092]}
-          markers={origin ? [{ id: origin.code, lat: origin.lat, lng: origin.lng, label: origin.name }] : []}
-          height={180}
-        />
+      <div className="mb-4 relative">
+        <LiveMap center={origin ? [origin.lat, origin.lng] : [-34.2917, -71.3092]} markers={mapMarkers} height={180} />
+        <button
+          onClick={onRefreshGps}
+          aria-label="Actualizar mi ubicación"
+          title="Actualizar mi ubicación"
+          className={`absolute bottom-3 right-3 z-[1001] w-10 h-10 rounded-full bg-white shadow-lg border border-slate-200 flex items-center justify-center text-lg active:scale-90 transition-transform ${
+            originLoading ? "animate-spin" : ""
+          }`}
+        >
+          🎯
+        </button>
       </div>
       <div className="flex items-center gap-3 bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-3 card-enter">
         <span className="w-9 h-9 rounded-full bg-cg-primary text-white flex items-center justify-center text-sm shrink-0">●</span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Tu ubicación</p>
-          <p className="font-bold truncate">{origin?.name ?? "Cargando..."}</p>
+          <p className="font-bold truncate">{originLoading && !origin ? "Detectando tu dirección..." : origin?.name ?? "Cargando..."}</p>
+          {originIsGps && <p className="text-[11px] text-slate-400 mt-0.5">📍 GPS real · dirección detectada automáticamente</p>}
         </div>
+        <button
+          onClick={onRefreshGps}
+          aria-label="Actualizar mi ubicación"
+          title="Actualizar mi ubicación"
+          className={`w-8 h-8 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm shrink-0 active:scale-90 transition-transform ${
+            originLoading ? "animate-spin" : ""
+          }`}
+        >
+          🧭
+        </button>
       </div>
 
       <div className="mb-4">

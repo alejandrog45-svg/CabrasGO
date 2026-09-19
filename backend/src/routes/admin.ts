@@ -355,3 +355,113 @@ adminRouter.get("/business/overview", requireAuth("ADMIN", "DISPATCHER"), async 
     },
   });
 });
+
+// Reporte de negocio con rango de fechas: ingresos, viajes, ranking de
+// conductores y uso por zona. Todo se calcula sobre requestedAt (fecha del
+// pedido) para que un viaje aparezca en el día en que el pasajero lo pidió,
+// sea que haya terminado completado o cancelado.
+adminRouter.get("/reports", requireAuth("ADMIN", "DISPATCHER"), async (req, res) => {
+  const now = new Date();
+  const to = req.query.to ? new Date(`${req.query.to}T23:59:59.999`) : now;
+  const from = req.query.from
+    ? new Date(`${req.query.from}T00:00:00.000`)
+    : new Date(to.getTime() - 29 * 24 * 60 * 60 * 1000);
+
+  const trips = await prisma.trip.findMany({
+    where: { requestedAt: { gte: from, lte: to } },
+    select: {
+      id: true,
+      status: true,
+      requestedAt: true,
+      driverId: true,
+      driver: { select: { user: { select: { firstName: true, lastName: true } } } },
+      geofenceZoneCode: true,
+      fareGrossClp: true,
+      driverNetClp: true,
+      platformFeeClp: true,
+      cancelledBy: true,
+      cancellationFeeClp: true,
+    },
+    orderBy: { requestedAt: "asc" },
+  });
+
+  const zones = await prisma.geofenceZone.findMany({ select: { code: true, name: true } });
+  const zoneNameByCode = new Map(zones.map((z) => [z.code, z.name]));
+
+  const completed = trips.filter((t) => t.status === "COMPLETED");
+  const cancelled = trips.filter((t) => t.status === "CANCELLED");
+
+  const gmvClp = completed.reduce((acc, t) => acc + t.fareGrossClp, 0);
+  const commissionRevenueClp = completed.reduce((acc, t) => acc + t.platformFeeClp, 0);
+  const driverPayoutsClp = completed.reduce((acc, t) => acc + t.driverNetClp, 0);
+  const cancellationFeeRevenueClp = cancelled.reduce((acc, t) => acc + t.cancellationFeeClp, 0);
+
+  const byDayMap = new Map<
+    string,
+    { date: string; tripsRequested: number; tripsCompleted: number; tripsCancelled: number; gmvClp: number; commissionClp: number }
+  >();
+  for (const t of trips) {
+    const date = t.requestedAt.toISOString().slice(0, 10);
+    if (!byDayMap.has(date)) {
+      byDayMap.set(date, { date, tripsRequested: 0, tripsCompleted: 0, tripsCancelled: 0, gmvClp: 0, commissionClp: 0 });
+    }
+    const row = byDayMap.get(date)!;
+    row.tripsRequested += 1;
+    if (t.status === "COMPLETED") {
+      row.tripsCompleted += 1;
+      row.gmvClp += t.fareGrossClp;
+      row.commissionClp += t.platformFeeClp;
+    }
+    if (t.status === "CANCELLED") row.tripsCancelled += 1;
+  }
+  const byDay = [...byDayMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+  const driverMap = new Map<
+    string,
+    { driverId: string; name: string; tripsCompleted: number; tripsCancelled: number; netClp: number }
+  >();
+  for (const t of trips) {
+    if (!t.driverId) continue;
+    if (!driverMap.has(t.driverId)) {
+      const name = t.driver?.user ? `${t.driver.user.firstName} ${t.driver.user.lastName}` : "Conductor";
+      driverMap.set(t.driverId, { driverId: t.driverId, name, tripsCompleted: 0, tripsCancelled: 0, netClp: 0 });
+    }
+    const row = driverMap.get(t.driverId)!;
+    if (t.status === "COMPLETED") {
+      row.tripsCompleted += 1;
+      row.netClp += t.driverNetClp;
+    }
+    if (t.status === "CANCELLED" && t.cancelledBy === "DRIVER") row.tripsCancelled += 1;
+  }
+  const driverRanking = [...driverMap.values()].sort((a, b) => b.netClp - a.netClp);
+
+  const zoneMap = new Map<string, { zoneCode: string; zoneName: string; tripsCompleted: number; gmvClp: number }>();
+  for (const t of completed) {
+    const code = t.geofenceZoneCode ?? "SIN_ZONA";
+    if (!zoneMap.has(code)) {
+      zoneMap.set(code, { zoneCode: code, zoneName: zoneNameByCode.get(code) ?? "Sin geocerca", tripsCompleted: 0, gmvClp: 0 });
+    }
+    const row = zoneMap.get(code)!;
+    row.tripsCompleted += 1;
+    row.gmvClp += t.fareGrossClp;
+  }
+  const zoneUsage = [...zoneMap.values()].sort((a, b) => b.tripsCompleted - a.tripsCompleted);
+
+  res.json({
+    range: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
+    summary: {
+      tripsRequested: trips.length,
+      tripsCompleted: completed.length,
+      tripsCancelled: cancelled.length,
+      completionRatePct: trips.length ? Math.round((completed.length / trips.length) * 100) : 0,
+      gmvClp,
+      commissionRevenueClp,
+      driverPayoutsClp,
+      cancellationFeeRevenueClp,
+      avgFareClp: completed.length ? Math.round(gmvClp / completed.length) : 0,
+    },
+    byDay,
+    driverRanking,
+    zoneUsage,
+  });
+});

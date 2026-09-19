@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, getUser, clearSession } from "../../lib/api";
 import { formatClp, formatPatente } from "../../lib/format";
 import { LiveMap } from "../../components/LiveMap";
 import { LANDMARKS_CENTER } from "../../lib/landmarks";
+import { ManualModal } from "../../components/ManualModal";
+import { ADMIN_MANUAL } from "../../lib/manuals";
 
 interface Kpis {
   gmvTodayClp: number;
@@ -97,7 +99,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function AdminApp() {
   const navigate = useNavigate();
   const user = getUser();
-  const [tab, setTab] = useState<"kpis" | "flota" | "geocercas" | "combustible" | "usuarios" | "negocio">("kpis");
+  const [tab, setTab] = useState<"kpis" | "flota" | "geocercas" | "combustible" | "usuarios" | "negocio" | "reportes">("kpis");
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [drivers, setDrivers] = useState<RadarDriver[]>([]);
   const [zones, setZones] = useState<GeofenceZone[]>([]);
@@ -107,6 +109,7 @@ export function AdminApp() {
   const [overview, setOverview] = useState<BusinessOverview | null>(null);
   const [ads, setAds] = useState<AdCampaign[]>([]);
   const [bonuses, setBonuses] = useState<WeeklyBonusRow[]>([]);
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     if (!user || (user.role !== "ADMIN" && user.role !== "DISPATCHER")) {
@@ -183,6 +186,14 @@ export function AdminApp() {
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
+          <button
+            onClick={() => setShowManual(true)}
+            aria-label="Manual de uso"
+            title="Manual de uso"
+            className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-sm"
+          >
+            📘
+          </button>
           <span className="opacity-80 font-medium">{user.firstName} {user.lastName}</span>
           <button onClick={logout} className="text-red-300 font-semibold">Salir</button>
         </div>
@@ -196,6 +207,7 @@ export function AdminApp() {
           ["combustible", "Combustibles"],
           ["usuarios", "Usuarios & KYC"],
           ["negocio", "Modelo de Negocio"],
+          ["reportes", "Reportes"],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -229,7 +241,12 @@ export function AdminApp() {
             onDeleteAd={deleteAd}
           />
         )}
+        {tab === "reportes" && <ReportesTab />}
       </main>
+
+      {showManual && (
+        <ManualModal title="Manual de uso" subtitle="CabrasGo Admin" sections={ADMIN_MANUAL} onClose={() => setShowManual(false)} />
+      )}
     </div>
   );
 }
@@ -733,6 +750,239 @@ function UsersTab({ users }: { users: any[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+interface ReportsData {
+  range: { from: string; to: string };
+  summary: {
+    tripsRequested: number;
+    tripsCompleted: number;
+    tripsCancelled: number;
+    completionRatePct: number;
+    gmvClp: number;
+    commissionRevenueClp: number;
+    driverPayoutsClp: number;
+    cancellationFeeRevenueClp: number;
+    avgFareClp: number;
+  };
+  byDay: { date: string; tripsRequested: number; tripsCompleted: number; tripsCancelled: number; gmvClp: number; commissionClp: number }[];
+  driverRanking: { driverId: string; name: string; tripsCompleted: number; tripsCancelled: number; netClp: number }[];
+  zoneUsage: { zoneCode: string; zoneName: string; tripsCompleted: number; gmvClp: number }[];
+}
+
+function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ReportesTab() {
+  const today = new Date();
+  const monthAgo = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
+  const [from, setFrom] = useState(toIsoDate(monthAgo));
+  const [to, setTo] = useState(toIsoDate(today));
+  const [data, setData] = useState<ReportsData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const d = await api.get<ReportsData>(`/admin/reports?from=${from}&to=${to}`);
+      setData(d);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!data) return <p className="text-slate-400 text-sm">{loading ? "Cargando reporte..." : "Sin datos."}</p>;
+
+  const s = data.summary;
+  const cards = [
+    { label: "Viajes pedidos", value: s.tripsRequested },
+    { label: "Completados", value: s.tripsCompleted },
+    { label: "Cancelados", value: s.tripsCancelled },
+    { label: "Tasa de completitud", value: `${s.completionRatePct}%` },
+    { label: "GMV (CLP)", value: formatClp(s.gmvClp) },
+    { label: "Comisión plataforma (CLP)", value: formatClp(s.commissionRevenueClp) },
+    { label: "Pagado a conductores (CLP)", value: formatClp(s.driverPayoutsClp) },
+    { label: "Tarifa promedio (CLP)", value: formatClp(s.avgFareClp) },
+  ];
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-end gap-3 mb-6 bg-cg-surface border border-slate-200 rounded-2xl p-4">
+        <div>
+          <label className="block text-xs text-slate-400 font-semibold mb-1">Desde</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-400 font-semibold mb-1">Hasta</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <button onClick={load} disabled={loading} className="bg-cg-primary text-white rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50">
+          {loading ? "Cargando..." : "Actualizar"}
+        </button>
+        <p className="text-xs text-slate-400 ml-auto">Rango: {data.range.from} a {data.range.to}</p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {cards.map((c) => (
+          <div key={c.label} className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
+            <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">{c.label}</p>
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight">{c.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <ReportTable
+        title="Ingresos por día"
+        onExport={() =>
+          downloadCsv(
+            `cabrasgo_ingresos_${data.range.from}_${data.range.to}.csv`,
+            [
+              ["Fecha", "Viajes pedidos", "Completados", "Cancelados", "GMV CLP", "Comisión CLP"],
+              ...data.byDay.map((r) => [r.date, r.tripsRequested, r.tripsCompleted, r.tripsCancelled, r.gmvClp, r.commissionClp]),
+            ]
+          )
+        }
+      >
+        <table className="w-full text-sm">
+          <thead className="bg-cg-surfaceAlt text-slate-500">
+            <tr>
+              <th className="text-left px-4 py-3">Fecha</th>
+              <th className="text-left px-4 py-3">Pedidos</th>
+              <th className="text-left px-4 py-3">Completados</th>
+              <th className="text-left px-4 py-3">Cancelados</th>
+              <th className="text-left px-4 py-3">GMV</th>
+              <th className="text-left px-4 py-3">Comisión</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.byDay.map((r) => (
+              <tr key={r.date} className="border-t border-slate-100">
+                <td className="px-4 py-3">{r.date}</td>
+                <td className="px-4 py-3">{r.tripsRequested}</td>
+                <td className="px-4 py-3">{r.tripsCompleted}</td>
+                <td className="px-4 py-3">{r.tripsCancelled}</td>
+                <td className="px-4 py-3">{formatClp(r.gmvClp)}</td>
+                <td className="px-4 py-3">{formatClp(r.commissionClp)}</td>
+              </tr>
+            ))}
+            {data.byDay.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">Sin viajes en este rango.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ReportTable>
+
+      <ReportTable
+        title="Ranking de conductores"
+        onExport={() =>
+          downloadCsv(
+            `cabrasgo_ranking_conductores_${data.range.from}_${data.range.to}.csv`,
+            [
+              ["Conductor", "Viajes completados", "Cancelados por él", "Ganancia neta CLP"],
+              ...data.driverRanking.map((r) => [r.name, r.tripsCompleted, r.tripsCancelled, r.netClp]),
+            ]
+          )
+        }
+      >
+        <table className="w-full text-sm">
+          <thead className="bg-cg-surfaceAlt text-slate-500">
+            <tr>
+              <th className="text-left px-4 py-3">#</th>
+              <th className="text-left px-4 py-3">Conductor</th>
+              <th className="text-left px-4 py-3">Completados</th>
+              <th className="text-left px-4 py-3">Cancelados por él</th>
+              <th className="text-left px-4 py-3">Ganancia neta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.driverRanking.map((r, i) => (
+              <tr key={r.driverId} className="border-t border-slate-100">
+                <td className="px-4 py-3 text-slate-400">{i + 1}</td>
+                <td className="px-4 py-3 font-medium">{r.name}</td>
+                <td className="px-4 py-3">{r.tripsCompleted}</td>
+                <td className="px-4 py-3">{r.tripsCancelled}</td>
+                <td className="px-4 py-3 font-semibold">{formatClp(r.netClp)}</td>
+              </tr>
+            ))}
+            {data.driverRanking.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">Sin viajes en este rango.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ReportTable>
+
+      <ReportTable
+        title="Uso por zona"
+        onExport={() =>
+          downloadCsv(
+            `cabrasgo_uso_por_zona_${data.range.from}_${data.range.to}.csv`,
+            [
+              ["Zona", "Viajes completados", "GMV CLP"],
+              ...data.zoneUsage.map((r) => [r.zoneName, r.tripsCompleted, r.gmvClp]),
+            ]
+          )
+        }
+      >
+        <table className="w-full text-sm">
+          <thead className="bg-cg-surfaceAlt text-slate-500">
+            <tr>
+              <th className="text-left px-4 py-3">Zona</th>
+              <th className="text-left px-4 py-3">Viajes completados</th>
+              <th className="text-left px-4 py-3">GMV</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.zoneUsage.map((r) => (
+              <tr key={r.zoneCode} className="border-t border-slate-100">
+                <td className="px-4 py-3 font-medium">{r.zoneName}</td>
+                <td className="px-4 py-3">{r.tripsCompleted}</td>
+                <td className="px-4 py-3">{formatClp(r.gmvClp)}</td>
+              </tr>
+            ))}
+            {data.zoneUsage.length === 0 && (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center text-slate-400">Sin viajes en este rango.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ReportTable>
+    </div>
+  );
+}
+
+function ReportTable({ title, onExport, children }: { title: string; onExport: () => void; children: ReactNode }) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-bold">{title}</p>
+        <button onClick={onExport} className="text-xs font-semibold bg-cg-surfaceAlt rounded-full px-3 py-1.5 hover:bg-slate-200">
+          ⬇ Exportar CSV
+        </button>
+      </div>
+      <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden overflow-x-auto">{children}</div>
     </div>
   );
 }

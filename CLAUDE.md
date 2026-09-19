@@ -274,3 +274,39 @@ model end-to-end today with **zero external paid services**.
   successful GPS pings with immediate reflection in `GET /driver/me`. The
   demo driver (Osvaldo Bravo) was left back in `OFFLINE` after the test so
   production fleet state wasn't left dirty.
+
+## GPS persistente + aviso obligatorio de permiso (2026-09-19, pendiente de confirmar en celular)
+
+Auditoría pedida por el dueño de las 3 apps: estado general, botón "instalar
+app" al abrir links, y comportamiento del permiso de GPS (debe quedar
+predeterminado si se otorga, avisar de forma insistente/obligatoria si no,
+activarse de inmediato al aceptar).
+
+- **`PasajeroApp.tsx` y `ConductorApp.tsx`**: el GPS pasó de una lectura
+  única (`getCurrentPosition` al montar) a seguimiento continuo
+  (`watchPosition`) activo todo el tiempo que la app está abierta. En
+  conductor, antes el `watchPosition` solo corría mientras
+  `operationalStatus !== OFFLINE`; ahora corre siempre que la app está
+  abierta (el ping a `POST /driver/location/ping` se sigue mandando solo si
+  está online — el backend ya no-opea si está offline, ver
+  `backend/src/routes/driver.ts`).
+- **Permiso denegado o dispositivo sin soporte**: aparece un modal
+  bloqueante (sin botón de cerrar) explicando por qué se necesita el GPS,
+  con botón "Activar ubicación" que reintenta `watchPosition` al toque. Si
+  es "unsupported" (no hay nada que reintentar) el modal no muestra ese
+  botón, solo la explicación.
+- **Permiso concedido**: se activa de inmediato (ya funcionaba así) y queda
+  predeterminado siempre — eso lo maneja el propio navegador, la app nunca
+  vuelve a pedirlo si ya fue concedido una vez.
+- **Botón "instalar app"**: no existe componente propio en el repo — hoy
+  depende 100% del banner nativo del navegador vía el
+  `manifest.webmanifest` de `VitePWA` (`frontend/vite.config.ts`). Queda
+  pendiente que el dueño decida si se construye un botón in-app propio
+  (escuchando `beforeinstallprompt`) o se deja así.
+- **Verificación**: `tsc -b && vite build` sin errores (Node portátil de
+  `E:\nodejs-portable`, ya que el PATH del sistema en esta sesión no tenía
+  Node). Deployado a un canal preview de Firebase Hosting (no toca
+  `cabrasgo.web.app`): `https://cabrasgo--preview-gps-j80yi8xb.web.app`
+  (expira 2026-09-22). **Todavía sin probar en celular real ni commiteado**
+  — falta confirmación del dueño antes de mergear a `alejandro main` y
+  deployar a producción.

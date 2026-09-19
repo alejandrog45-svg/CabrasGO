@@ -4,6 +4,8 @@ import { api, getUser, clearSession } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
 import { formatClp, formatPatente } from "../../lib/format";
 import { AdBanner } from "../../components/AdBanner";
+import { ManualModal } from "../../components/ManualModal";
+import { CONDUCTOR_MANUAL } from "../../lib/manuals";
 
 interface DriverProfile {
   id: string;
@@ -59,9 +61,14 @@ export function ConductorApp() {
   } | null>(null);
   const [ads, setAds] = useState<{ id: string; title: string; bodyText: string; imageUrl: string | null }[]>([]);
   const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
+  const [showManual, setShowManual] = useState(false);
   const timerRef = useRef<number | null>(null);
   const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const profileRef = useRef<DriverProfile | null>(null);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   useEffect(() => {
     if (!user || user.role !== "DRIVER") {
@@ -78,19 +85,10 @@ export function ConductorApp() {
       setCountdown(payload.expiresInSecs);
     });
 
-    // El GPS se activa apenas abre la app, no recién al conectar/tocar "Conectado".
-    if (!navigator.geolocation) {
-      setGpsStatus("unsupported");
-    } else {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          lastPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          setGpsStatus("active");
-        },
-        () => setGpsStatus("denied"),
-        { timeout: 5000 }
-      );
-    }
+    // El GPS se activa apenas abre la app y queda persistente (watchPosition) mientras la
+    // app esté abierta, esté "Conectado" o no — el ping al backend solo importa online, pero
+    // el conductor debe ver su posición y el estado del permiso todo el tiempo que usa la app.
+    requestGps();
 
     return () => {
       socket.off("trip:dispatch:offer");
@@ -98,32 +96,24 @@ export function ConductorApp() {
     };
   }, []);
 
-  // Mientras está "Conectado" hace seguimiento continuo y reporta posición cada pocos segundos.
-  useEffect(() => {
-    const online = profile?.operationalStatus && profile.operationalStatus !== "OFFLINE";
-    if (!online || !navigator.geolocation) {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+  function requestGps() {
+    if (!navigator.geolocation) {
+      setGpsStatus("unsupported");
       return;
     }
+    setGpsStatus((s) => (s === "active" ? s : "pending"));
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         lastPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setGpsStatus("active");
-        api.post("/driver/location/ping", lastPosRef.current).catch(() => {});
+        const online = profileRef.current?.operationalStatus && profileRef.current.operationalStatus !== "OFFLINE";
+        if (online) api.post("/driver/location/ping", lastPosRef.current).catch(() => {});
       },
       () => setGpsStatus("denied"),
       { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 }
     );
-    return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-    };
-  }, [profile?.operationalStatus]);
+  }
 
   useEffect(() => {
     if (!offer) return;
@@ -277,6 +267,14 @@ export function ConductorApp() {
             <span className={`w-1.5 h-1.5 rounded-full ${gpsStatus === "active" ? "bg-cg-accent animate-pulse" : "bg-current"}`} />
             GPS
           </span>
+          <button
+            onClick={() => setShowManual(true)}
+            aria-label="Manual de uso"
+            title="Manual de uso"
+            className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-sm"
+          >
+            📘
+          </button>
           <button onClick={logout} className="text-cg-danger text-sm font-semibold">
             Salir
           </button>
@@ -450,6 +448,41 @@ export function ConductorApp() {
             </div>
           </div>
         </div>
+      )}
+
+      {(gpsStatus === "denied" || gpsStatus === "unsupported") && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-cg-darkSurface border border-slate-800 rounded-3xl w-full max-w-sm p-6 text-center shadow-2xl">
+            <div className="text-5xl mb-3">📍</div>
+            <p className="text-lg font-extrabold mb-2">Activa tu ubicación para continuar</p>
+            <p className="text-sm text-slate-400 mb-5">
+              {gpsStatus === "unsupported"
+                ? "Este dispositivo o navegador no puede compartir tu ubicación. Probá desde otro celular o actualizá tu navegador para recibir viajes."
+                : "CabrasGo necesita tu ubicación en todo momento para asignarte viajes cercanos y reportar tu posición en el mapa. Sin GPS activo no podés conectarte."}
+            </p>
+            {gpsStatus === "denied" && (
+              <button
+                onClick={requestGps}
+                className="w-full bg-cg-accent text-black rounded-xl py-3.5 font-extrabold active:scale-95 transition-all duration-150"
+              >
+                Activar ubicación
+              </button>
+            )}
+            <p className="text-[11px] text-slate-500 mt-3">
+              Si tu navegador ya bloqueó el permiso, tocá el ícono de candado junto a la dirección del sitio, habilitá "Ubicación" y volvé a tocar el botón.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {showManual && (
+        <ManualModal
+          title="Manual de uso"
+          subtitle="CabrasGo Conductor"
+          sections={CONDUCTOR_MANUAL}
+          onClose={() => setShowManual(false)}
+          dark
+        />
       )}
     </div>
   );
