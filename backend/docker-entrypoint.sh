@@ -1,11 +1,8 @@
 #!/bin/sh
 set -e
 
-# Cloud Run's filesystem is read-only outside /tmp; SQLite lives there.
-# Each cold start gets a fresh, freshly-seeded demo database.
-export DATABASE_URL="file:/tmp/dev.db"
-
+# DATABASE_URL is injected by the platform (Railway Postgres plugin in production).
 npx prisma db push --skip-generate --accept-data-loss
-npx tsx prisma/seed.ts
+npx tsx prisma/seed-if-empty.ts
 
 exec node dist/index.js
