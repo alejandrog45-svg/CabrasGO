@@ -79,7 +79,7 @@ export function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-cg-accent text-white font-semibold rounded-xl py-3 hover:opacity-90 disabled:opacity-50"
+            className="btn-primary"
           >
             {loading ? "Ingresando..." : "Ingresar"}
           </button>

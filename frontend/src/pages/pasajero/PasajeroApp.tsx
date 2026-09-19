@@ -218,7 +218,7 @@ export function PasajeroApp() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-cg-bg text-cg-primary">
+    <div className="min-h-screen bg-cg-bg text-cg-primary page-enter">
       <header className="flex items-center justify-between px-4 py-3 bg-cg-surface shadow-sm sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <img src="/logo.png" className="w-8 h-8 rounded-lg" />
@@ -322,7 +322,7 @@ function HomeScreen({
           height={180}
         />
       </div>
-      <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm">
+      <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm card-enter">
         <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Tu ubicación</p>
         <p className="font-semibold">{origin?.name ?? "Cargando..."}</p>
       </div>
@@ -384,7 +384,7 @@ function CategoriesScreen({
       <button onClick={onBack} className="text-sm text-slate-500 mb-3">
         ← Cambiar destino
       </button>
-      <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm">
+      <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm card-enter">
         <p className="text-sm text-slate-500">Destino</p>
         <p className="font-semibold">{destination.name}</p>
         <p className="text-xs text-slate-400 mt-1">
@@ -430,7 +430,7 @@ function CategoriesScreen({
       <button
         disabled={!selected}
         onClick={onConfirm}
-        className="w-full bg-cg-accent text-white font-semibold rounded-xl py-3 disabled:opacity-40"
+        className="btn-primary"
       >
         Confirmar viaje
       </button>
@@ -505,7 +505,7 @@ function TrackingScreen({
       </div>
 
       {status === "IN_PROGRESS" && (
-        <button onClick={onPay} className="w-full bg-cg-accent text-white font-semibold rounded-xl py-3">
+        <button onClick={onPay} className="btn-primary">
           Finalizar y pagar
         </button>
       )}
@@ -549,7 +549,7 @@ function PaymentScreen({
           </button>
         ))}
       </div>
-      <button onClick={onConfirm} className="w-full bg-cg-accent text-white font-semibold rounded-xl py-3">
+      <button onClick={onConfirm} className="btn-primary">
         Pagar {formatClp(fare)}
       </button>
     </div>
@@ -593,7 +593,7 @@ function RatingScreen({
           </button>
         ))}
       </div>
-      <button onClick={onSubmit} className="w-full bg-cg-accent text-white font-semibold rounded-xl py-3">
+      <button onClick={onSubmit} className="btn-primary">
         Enviar calificación
       </button>
     </div>

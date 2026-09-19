@@ -201,7 +201,7 @@ export function ConductorApp() {
   const online = profile.operationalStatus !== "OFFLINE";
 
   return (
-    <div className="min-h-screen bg-cg-darkBg text-cg-darkPrimary">
+    <div className="min-h-screen bg-cg-darkBg text-cg-darkPrimary page-enter">
       <header className="flex items-center justify-between px-4 py-3 bg-cg-darkSurface">
         <div className="flex items-center gap-2">
           <img src="/logo.png" className="w-8 h-8 rounded-lg" />
@@ -367,10 +367,10 @@ export function ConductorApp() {
               <p className="text-cg-warning">{offer.terrainType.includes("RIPIO") ? "⚠ Ripio compactado" : "Asfalto"} {offer.requires4x4 ? "· Requiere 4x4" : ""}</p>
             </div>
             <div className="flex gap-3">
-              <button onClick={declineOffer} className="flex-1 bg-slate-700 rounded-xl py-3 font-semibold">
+              <button onClick={declineOffer} className="flex-1 bg-slate-700 rounded-xl py-3 font-semibold transition-all duration-150 active:scale-95">
                 Rechazar
               </button>
-              <button onClick={acceptOffer} className="flex-1 bg-cg-accent text-black rounded-xl py-3 font-bold">
+              <button onClick={acceptOffer} className="flex-1 bg-cg-accent text-black rounded-xl py-3 font-bold transition-all duration-150 active:scale-95 shadow-lg shadow-emerald-500/20">
                 Aceptar
               </button>
             </div>
@@ -417,7 +417,7 @@ function ActiveTripCard({
           </button>
         </div>
       ) : (
-        <button onClick={onComplete} className="w-full bg-cg-accent text-black font-bold rounded-xl py-3 mb-2">
+        <button onClick={onComplete} className="btn-primary-dark mb-2">
           Finalizar viaje
         </button>
       )}

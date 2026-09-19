@@ -173,7 +173,7 @@ export function AdminApp() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-cg-bg text-cg-primary">
+    <div className="min-h-screen bg-cg-bg text-cg-primary page-enter">
       <header className="flex items-center justify-between px-6 py-4 bg-cg-primary text-white">
         <div className="flex items-center gap-3">
           <img src="/logo.png" className="w-9 h-9 rounded-lg" />
@@ -245,8 +245,12 @@ function KpiTab({ kpis }: { kpis: Kpis }) {
   return (
     <div>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        {cards.map((c) => (
-          <div key={c.label} className="bg-cg-surface rounded-2xl p-4 shadow-sm">
+        {cards.map((c, i) => (
+          <div
+            key={c.label}
+            className="bg-cg-surface rounded-2xl p-4 shadow-sm card-enter"
+            style={{ animationDelay: `${i * 40}ms` }}
+          >
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">{c.label}</p>
             <p className="text-2xl font-bold">{c.value}</p>
           </div>
