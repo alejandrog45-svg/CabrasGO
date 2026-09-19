@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="UTF-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1080px; overflow: hidden; }
+  body {
+    font-family: 'Poppins', sans-serif;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(16,185,129,0.35), transparent 40%),
+      radial-gradient(circle at 90% 85%, rgba(16,185,129,0.25), transparent 45%),
+      #0F172A;
+    color: #fff;
+    position: relative;
+  }
+
+  /* sunburst ambient decoration, top */
+  .sunburst {
+    position: absolute;
+    top: -420px; left: 50%;
+    transform: translateX(-50%);
+    width: 1100px; height: 1100px;
+    border-radius: 50%;
+    background: repeating-conic-gradient(
+      rgba(16,185,129,0.10) 0deg 4deg,
+      transparent 4deg 12deg
+    );
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 2;
+    width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 90px 80px 70px;
+  }
+
+  .badge {
+    width: 190px; height: 190px;
+    border-radius: 44px;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+    margin-bottom: 36px;
+  }
+  .badge img {
+    width: 150px; height: 150px;
+    object-fit: cover;
+    border-radius: 32px;
+  }
+
+  .ribbon {
+    background: linear-gradient(90deg, #10B981, #0F766E);
+    color: #fff;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 900;
+    font-size: 30px;
+    letter-spacing: 4px;
+    padding: 14px 42px;
+    border-radius: 999px;
+    margin-bottom: 34px;
+    box-shadow: 0 10px 30px rgba(16,185,129,0.4);
+  }
+
+  h1 {
+    font-family: 'Anton', sans-serif;
+    font-weight: 400;
+    font-size: 108px;
+    line-height: 0.98;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    -webkit-text-stroke: 2px rgba(0,0,0,0.25);
+    text-shadow: 0 6px 0 rgba(0,0,0,0.25), 0 18px 40px rgba(0,0,0,0.4);
+    margin-bottom: 26px;
+  }
+  h1 .accent { color: #34D399; }
+
+  .tagline {
+    font-size: 34px;
+    font-weight: 600;
+    color: #CBD5E1;
+    text-align: center;
+    max-width: 780px;
+    line-height: 1.4;
+    margin-bottom: 56px;
+  }
+
+  .zones {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 64px;
+  }
+  .zone-pill {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #E2E8F0;
+    font-weight: 700;
+    font-size: 26px;
+    padding: 14px 28px;
+    border-radius: 999px;
+  }
+
+  .cta-card {
+    margin-top: auto;
+    width: 100%;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 32px;
+    padding: 40px 50px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .cta-text {
+    font-weight: 800;
+    font-size: 32px;
+  }
+  .cta-url {
+    font-family: 'Anton', sans-serif;
+    font-weight: 400;
+    font-size: 44px;
+    color: #34D399;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+  <div class="sunburst"></div>
+  <div class="wrap">
+    <div class="badge"><img src="../../frontend/public/logo.png" /></div>
+    <div class="ribbon">NUEVO EN LA REGIÓN</div>
+    <h1>CabrasGo<br/>ya <span class="accent">llegó</span></h1>
+    <p class="tagline">Movilidad pensada para Las Cabras, Peumo y la cuenca del Lago Rapel</p>
+    <div class="zones">
+      <div class="zone-pill">Las Cabras</div>
+      <div class="zone-pill">Peumo</div>
+      <div class="zone-pill">San Vicente</div>
+      <div class="zone-pill">Lago Rapel</div>
+    </div>
+    <div class="cta-card">
+      <div class="cta-text">Pedí tu viaje en</div>
+      <div class="cta-url">cabrasgo.web.app</div>
+    </div>
+  </div>
+</body>
+</html>
