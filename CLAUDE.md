@@ -40,6 +40,7 @@ backend/src/lib/landmarks.ts   The 10 validated VI Región GPS landmarks
 backend/src/lib/platformConfig.ts  Commission/cancellation/VIP/bonus config (single-row PlatformConfig)
 backend/src/lib/weeklyBonus.ts     Rolling-week driver goal bonus grant logic
 backend/src/routes/            passenger.ts, driver.ts, admin.ts, auth.ts (REST API)
+                                driver.ts also exposes POST /driver/location/ping (continuous GPS while online)
 backend/src/ws/socket.ts       Socket.io: 15s dispatch cascade, telemetry, movement sim
 frontend/src/pages/pasajero/   Passenger app (light mode)
 frontend/src/pages/conductor/  Driver app (dark OLED mode)
@@ -222,3 +223,54 @@ comment and "Known spec deviations" section above document the exact swap
 path to Postgres+PostGIS/Redis/Google Maps for a production deployment at
 scale. The point is that CabrasGo can run its full commission/business
 model end-to-end today with **zero external paid services**.
+
+## Frontend visual redesign + real GPS activation (2026-09-19)
+
+- **Uber-inspired visual pass** on all 3 apps (pasajero/conductor/admin):
+  className/JSX-only changes (borders instead of soft shadows, bolder
+  typography, icon rows, tighter cards). Zero business-logic changes. Base
+  reference designs live in
+  `../stitch_ride_sharing_app_platform EJEMPLO DISEÑO INICIAL/` (local only,
+  not in this repo) and the Stitch project "Ride-Sharing App Platform"
+  (id `12881645426853570551`).
+- **PWA manifest fix**: `start_url` in `frontend/vite.config.ts`'s
+  `VitePWA({ manifest: {...} })` changed from a hardcoded `/pasajero` to
+  `/`. The old value meant any installed home-screen shortcut always
+  launched straight into the passenger app regardless of which URL/role
+  the person intended — this is why conductor/admin links looked "forced"
+  into the passenger screen when opened from a home-screen icon.
+- **Passenger — GPS-driven origin**: `PasajeroApp.tsx` requests
+  `navigator.geolocation.getCurrentPosition` as soon as the app mounts
+  (not on first trip request). If granted, it computes the nearest of the
+  10 landmarks via a local `haversineKm()` helper and sets it as `origin`
+  when within 6 km; beyond that it keeps the API's `defaultOrigin`
+  (Plaza de Armas de Las Cabras). A small GPS-denied badge shows in the
+  header when permission is refused/unavailable.
+- **Passenger — destination text search**: `HomeScreen`'s `¿A dónde vamos?`
+  list is now filterable by a text input (`search` state), client-side
+  substring match over the existing `landmarks` array — no new backend
+  endpoint, no geocoding.
+- **Passenger — "Para mí / Para otra persona"**: `rideFor`/`riderName`/
+  `riderPhone` state on `PasajeroApp`. When booking for someone else, the
+  name+phone are appended as free text to `origin.address` sent to
+  `POST /passenger/trips/request` (e.g. `"... · Pasajero: Ana (+56911112222)"`).
+  No schema change — reuses the existing free-text address field, so the
+  driver sees it as part of the pickup address.
+- **Driver — GPS activates on app open, not on "Conectado"**:
+  `ConductorApp.tsx` requests geolocation on mount and shows a GPS status
+  pill in the header (`pending` / `active` pulsing green / `denied` red /
+  `unsupported`). While `operationalStatus !== "OFFLINE"` it runs
+  `navigator.geolocation.watchPosition` and reports every update to the
+  new `POST /driver/location/ping` endpoint (`backend/src/routes/driver.ts`),
+  which just updates `Driver.currentLatitude/currentLongitude/lastPingAt`
+  (no-ops with `{ ok: false, reason: "offline" }` if the driver went
+  offline). `toggleStatus()` reuses the already-known position instead of
+  re-prompting for permission every time "Conectado" is tapped.
+- **Verified against production** (not simulated locally): `POST
+  /passenger/quote` and `POST /driver/location/ping` were called directly
+  against `cabrasgo-backend-production.up.railway.app` for the 4 seeded
+  zones (Las Cabras Centro, Marina Golf Rapel, El Manzano, Llallauquén) —
+  correct `dynamicMultiplier` per zone (1.0 / 1.35 / 1.15 / 1.35) and
+  successful GPS pings with immediate reflection in `GET /driver/me`. The
+  demo driver (Osvaldo Bravo) was left back in `OFFLINE` after the test so
+  production fleet state wasn't left dirty.
