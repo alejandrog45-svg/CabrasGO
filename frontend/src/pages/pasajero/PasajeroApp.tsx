@@ -14,6 +14,16 @@ interface Landmark {
   note: string;
 }
 
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
 interface QuoteCategory {
   category: "STANDARD_SEDAN" | "RURAL_4X4_XL";
   etaMinutes: number;
@@ -63,6 +73,11 @@ export function PasajeroApp() {
   const [tags, setTags] = useState<string[]>([]);
   const [ads, setAds] = useState<{ id: string; title: string; bodyText: string; imageUrl: string | null }[]>([]);
   const [cancelFeeClp, setCancelFeeClp] = useState<number | null>(null);
+  const [rideFor, setRideFor] = useState<"me" | "other">("me");
+  const [riderName, setRiderName] = useState("");
+  const [riderPhone, setRiderPhone] = useState("");
+  const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
+  const [myGeo, setMyGeo] = useState<{ lat: number; lng: number } | null>(null);
   const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -82,7 +97,35 @@ export function PasajeroApp() {
       .get<{ cancellationFeePassengerClp: number }>("/passenger/cancellation-policy")
       .then((d) => setCancelFeeClp(d.cancellationFeePassengerClp))
       .catch(() => {});
+
+    // GPS se activa apenas abre la app, no espera a que el pasajero pida un viaje.
+    if (!navigator.geolocation) {
+      setGpsStatus("unsupported");
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setMyGeo({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setGpsStatus("active");
+        },
+        () => setGpsStatus("denied"),
+        { timeout: 6000 }
+      );
+    }
   }, []);
+
+  useEffect(() => {
+    if (!myGeo || landmarks.length === 0) return;
+    let nearest = landmarks[0];
+    let nearestDistKm = haversineKm(myGeo, landmarks[0]);
+    for (const l of landmarks) {
+      const d = haversineKm(myGeo, l);
+      if (d < nearestDistKm) {
+        nearest = l;
+        nearestDistKm = d;
+      }
+    }
+    if (nearestDistKm <= 6) setOrigin(nearest);
+  }, [myGeo, landmarks]);
 
   useEffect(() => {
     if (!tripId || screen !== "tracking") return;
@@ -140,10 +183,15 @@ export function PasajeroApp() {
 
   async function requestTrip() {
     if (!origin || !destination || !selectedCategory) return;
+    const forOther = rideFor === "other" && riderName.trim();
     setScreen("dispatching");
     try {
       const res = await api.post<{ tripId: string; pin: string }>("/passenger/trips/request", {
-        origin: { lat: origin.lat, lng: origin.lng, address: origin.name },
+        origin: {
+          lat: origin.lat,
+          lng: origin.lng,
+          address: forOther ? `${origin.name} · Pasajero: ${riderName.trim()}${riderPhone.trim() ? ` (${riderPhone.trim()})` : ""}` : origin.name,
+        },
         destination: { lat: destination.lat, lng: destination.lng, address: destination.name },
         category: selectedCategory.category,
         paymentMethod: payMethod,
@@ -219,14 +267,19 @@ export function PasajeroApp() {
 
   return (
     <div className="min-h-screen bg-cg-bg text-cg-primary page-enter">
-      <header className="flex items-center justify-between px-4 py-3 bg-cg-surface shadow-sm sticky top-0 z-10">
+      <header className="flex items-center justify-between px-4 py-3 bg-cg-surface border-b border-slate-200 sticky top-0 z-10">
         <div className="flex items-center gap-2">
           <img src="/logo.png" className="w-8 h-8 rounded-lg" />
-          <span className="font-bold">CabrasGo</span>
+          <span className="font-extrabold tracking-tight text-lg">CabrasGo</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-500">{user.firstName}</span>
-          <button onClick={logout} className="text-cg-danger font-medium">
+          {gpsStatus === "denied" && (
+            <span className="text-[10px] font-bold text-cg-danger bg-red-50 px-2 py-1 rounded-full" title="Activa la ubicación para detectar tu punto de partida automáticamente">
+              GPS desactivado
+            </span>
+          )}
+          <span className="text-slate-500 font-medium">{user.firstName}</span>
+          <button onClick={logout} className="text-cg-danger font-semibold">
             Salir
           </button>
         </div>
@@ -243,6 +296,12 @@ export function PasajeroApp() {
               landmarks={landmarks}
               quickAccess={quickAccess}
               onPick={getQuote}
+              rideFor={rideFor}
+              setRideFor={setRideFor}
+              riderName={riderName}
+              setRiderName={setRiderName}
+              riderPhone={riderPhone}
+              setRiderPhone={setRiderPhone}
             />
           </>
         )}
@@ -307,12 +366,31 @@ function HomeScreen({
   landmarks,
   quickAccess,
   onPick,
+  rideFor,
+  setRideFor,
+  riderName,
+  setRiderName,
+  riderPhone,
+  setRiderPhone,
 }: {
   origin: Landmark | null;
   landmarks: Landmark[];
   quickAccess: Landmark[];
   onPick: (l: Landmark) => void;
+  rideFor: "me" | "other";
+  setRideFor: (v: "me" | "other") => void;
+  riderName: string;
+  setRiderName: (v: string) => void;
+  riderPhone: string;
+  setRiderPhone: (v: string) => void;
 }) {
+  const [search, setSearch] = useState("");
+  const [forOpen, setForOpen] = useState(false);
+  const normalized = search.trim().toLowerCase();
+  const results = normalized
+    ? landmarks.filter((l) => l.code !== origin?.code && l.name.toLowerCase().includes(normalized))
+    : landmarks.filter((l) => l.code !== origin?.code);
+
   return (
     <div>
       <div className="mb-4">
@@ -322,39 +400,111 @@ function HomeScreen({
           height={180}
         />
       </div>
-      <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm card-enter">
-        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Tu ubicación</p>
-        <p className="font-semibold">{origin?.name ?? "Cargando..."}</p>
+      <div className="flex items-center gap-3 bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-3 card-enter">
+        <span className="w-9 h-9 rounded-full bg-cg-primary text-white flex items-center justify-center text-sm shrink-0">●</span>
+        <div className="min-w-0">
+          <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Tu ubicación</p>
+          <p className="font-bold truncate">{origin?.name ?? "Cargando..."}</p>
+        </div>
       </div>
 
-      <p className="text-sm font-semibold text-slate-600 mb-2">Destinos frecuentes</p>
-      <div className="grid grid-cols-2 gap-2 mb-6">
-        {quickAccess.map((l) => (
+      <div className="mb-4">
+        <button
+          onClick={() => setForOpen((o) => !o)}
+          className="flex items-center gap-2 bg-cg-surfaceAlt rounded-full pl-1.5 pr-3 py-1.5 text-xs font-bold text-cg-primary"
+        >
+          <span className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-sm">{rideFor === "me" ? "🧍" : "👥"}</span>
+          {rideFor === "me" ? "Para mí" : riderName.trim() ? `Para ${riderName.trim().split(" ")[0]}` : "Para otra persona"}
+          <span className="text-slate-400">▾</span>
+        </button>
+
+        {forOpen && (
+          <div className="mt-2 bg-cg-surface border border-slate-200 rounded-2xl p-3 space-y-2 card-enter">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setRideFor("me")}
+                className={`rounded-xl py-2 text-xs font-bold border-2 transition ${
+                  rideFor === "me" ? "border-cg-primary bg-cg-surfaceAlt" : "border-slate-200"
+                }`}
+              >
+                🧍 Para mí
+              </button>
+              <button
+                onClick={() => setRideFor("other")}
+                className={`rounded-xl py-2 text-xs font-bold border-2 transition ${
+                  rideFor === "other" ? "border-cg-primary bg-cg-surfaceAlt" : "border-slate-200"
+                }`}
+              >
+                👥 Para otra persona
+              </button>
+            </div>
+            {rideFor === "other" && (
+              <div className="space-y-2 pt-1">
+                <input
+                  value={riderName}
+                  onChange={(e) => setRiderName(e.target.value)}
+                  placeholder="Nombre de quien viaja"
+                  className="w-full bg-cg-surfaceAlt rounded-lg px-3 py-2 text-sm font-semibold outline-none"
+                />
+                <input
+                  value={riderPhone}
+                  onChange={(e) => setRiderPhone(e.target.value)}
+                  placeholder="Teléfono (opcional, +569...)"
+                  className="w-full bg-cg-surfaceAlt rounded-lg px-3 py-2 text-sm font-semibold outline-none"
+                />
+                <p className="text-[11px] text-slate-400">El conductor verá este nombre como referencia de recogida.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="relative mb-6">
+        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="¿A dónde vamos? Buscar destino..."
+          className="w-full bg-cg-surface border-2 border-slate-200 focus:border-cg-primary outline-none rounded-2xl pl-11 pr-4 py-3.5 text-sm font-semibold placeholder:font-normal placeholder:text-slate-400 transition"
+        />
+      </div>
+
+      {!normalized && (
+        <>
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Destinos frecuentes</p>
+          <div className="grid grid-cols-2 gap-2 mb-7">
+            {quickAccess.map((l) => (
+              <button
+                key={l.code}
+                onClick={() => onPick(l)}
+                className="bg-cg-surface border border-slate-200 rounded-xl p-3 text-left hover:border-cg-primary transition"
+              >
+                <p className="text-sm font-bold truncate">{l.name}</p>
+                <p className="text-xs text-slate-400 truncate">{l.note}</p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+        {normalized ? `Resultados (${results.length})` : "¿A dónde vamos?"}
+      </p>
+      <div className="rounded-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100 bg-cg-surface">
+        {results.map((l) => (
           <button
             key={l.code}
             onClick={() => onPick(l)}
-            className="bg-cg-surface rounded-xl p-3 text-left shadow-sm hover:shadow-md transition"
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-cg-surfaceAlt transition"
           >
-            <p className="text-sm font-semibold truncate">{l.name}</p>
-            <p className="text-xs text-slate-400 truncate">{l.note}</p>
+            <span className="w-8 h-8 rounded-full bg-cg-surfaceAlt text-cg-primary flex items-center justify-center text-xs shrink-0">▪</span>
+            <span className="text-sm font-semibold flex-1 min-w-0 truncate">{l.name}</span>
+            <span className="text-slate-300 text-base">›</span>
           </button>
         ))}
-      </div>
-
-      <p className="text-sm font-semibold text-slate-600 mb-2">¿A dónde vamos?</p>
-      <div className="space-y-2">
-        {landmarks
-          .filter((l) => l.code !== origin?.code)
-          .map((l) => (
-            <button
-              key={l.code}
-              onClick={() => onPick(l)}
-              className="w-full flex items-center justify-between bg-cg-surface rounded-xl px-4 py-3 shadow-sm hover:bg-cg-surfaceAlt"
-            >
-              <span className="text-sm">{l.name}</span>
-              <span className="text-cg-accent text-xs font-semibold">Cotizar</span>
-            </button>
-          ))}
+        {normalized && results.length === 0 && (
+          <p className="text-sm text-slate-400 px-4 py-6 text-center">Sin resultados para "{search}". Probá con otro sector.</p>
+        )}
       </div>
     </div>
   );
@@ -384,9 +534,9 @@ function CategoriesScreen({
       <button onClick={onBack} className="text-sm text-slate-500 mb-3">
         ← Cambiar destino
       </button>
-      <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm card-enter">
-        <p className="text-sm text-slate-500">Destino</p>
-        <p className="font-semibold">{destination.name}</p>
+      <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-enter">
+        <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Destino</p>
+        <p className="font-bold">{destination.name}</p>
         <p className="text-xs text-slate-400 mt-1">
           {quote.distanceTotalKm} km · {quote.distanceDirtKm} km ripio
           {quote.geofenceZoneName ? ` · Zona ${quote.geofenceZoneName}` : ""}
@@ -394,32 +544,36 @@ function CategoriesScreen({
         </p>
       </div>
 
-      <div className="space-y-3 mb-4">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Elige tu viaje</p>
+      <div className="space-y-2 mb-5">
         {quote.categories.map((c) => (
           <button
             key={c.category}
             onClick={() => onSelect(c)}
-            className={`w-full flex items-center justify-between rounded-xl p-4 border-2 transition ${
-              selected?.category === c.category ? "border-cg-accent bg-emerald-50" : "border-transparent bg-cg-surface"
-            } shadow-sm`}
+            className={`w-full flex items-center gap-3 rounded-xl p-3.5 border-2 transition text-left ${
+              selected?.category === c.category ? "border-cg-primary bg-cg-surfaceAlt" : "border-slate-200 bg-cg-surface"
+            }`}
           >
-            <div className="text-left">
-              <p className="font-semibold">{CATEGORY_LABEL[c.category]}</p>
-              <p className="text-xs text-slate-400">ETA {c.etaMinutes} min {c.recommended ? "· Recomendado (4x4)" : ""}</p>
+            <span className="w-11 h-11 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-lg shrink-0">
+              {c.category === "RURAL_4X4_XL" ? "🚙" : "🚗"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold truncate">{CATEGORY_LABEL[c.category]}</p>
+              <p className="text-xs text-slate-400">{c.etaMinutes} min de espera {c.recommended ? "· Recomendado" : ""}</p>
             </div>
-            <span className="font-bold text-lg">{formatClp(c.totalFareClp)}</span>
+            <span className="font-extrabold text-lg tabular-nums shrink-0">{formatClp(c.totalFareClp)}</span>
           </button>
         ))}
       </div>
 
-      <p className="text-sm font-semibold text-slate-600 mb-2">Método de pago</p>
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Método de pago</p>
       <div className="grid grid-cols-3 gap-2 mb-6">
         {(["WEBPAY_ONECLICK", "CUENTARUT_BANCOESTADO", "CASH"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setPayMethod(m)}
-            className={`rounded-xl py-2 text-xs font-semibold ${
-              payMethod === m ? "bg-cg-primary text-white" : "bg-cg-surfaceAlt text-slate-600"
+            className={`rounded-xl py-2.5 text-xs font-bold border transition ${
+              payMethod === m ? "bg-cg-primary text-white border-cg-primary" : "bg-cg-surface text-slate-600 border-slate-200"
             }`}
           >
             {m === "WEBPAY_ONECLICK" ? "Webpay" : m === "CUENTARUT_BANCOESTADO" ? "CuentaRUT" : "Efectivo"}
@@ -458,9 +612,9 @@ function TrackingScreen({
   };
   return (
     <div>
-      <div className="bg-cg-primary text-white rounded-2xl p-4 mb-4 shadow-sm">
-        <p className="text-xs uppercase tracking-wide opacity-70">Estado</p>
-        <p className="text-lg font-bold">{statusLabel[status] ?? status}</p>
+      <div className="bg-cg-primary text-white rounded-2xl p-4 mb-4">
+        <p className="text-[11px] uppercase tracking-wide opacity-60 font-semibold">Estado</p>
+        <p className="text-xl font-extrabold tracking-tight">{statusLabel[status] ?? status}</p>
       </div>
 
       <div className="mb-4 shadow-sm">
@@ -477,15 +631,18 @@ function TrackingScreen({
       </div>
 
       {live.driver && (
-        <div className="bg-cg-surface rounded-2xl p-4 mb-4 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="font-semibold">{live.driver.name}</p>
-            <p className="text-xs text-slate-400">{live.driver.model} · {formatPatente(live.driver.plate)}</p>
-            <p className="text-xs text-slate-400">⭐ {Number(live.driver.rating).toFixed(1)}</p>
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-11 h-11 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-lg shrink-0">🚗</span>
+            <div className="min-w-0">
+              <p className="font-bold truncate">{live.driver.name}</p>
+              <p className="text-xs text-slate-400 truncate">{live.driver.model} · {formatPatente(live.driver.plate)}</p>
+              <p className="text-xs text-slate-400">⭐ {Number(live.driver.rating).toFixed(1)}</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-slate-400">PIN</p>
-            <p className="text-2xl font-bold tracking-widest">{pin}</p>
+          <div className="text-right shrink-0 pl-3">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">PIN</p>
+            <p className="text-2xl font-extrabold tracking-widest tabular-nums">{pin}</p>
           </div>
         </div>
       )}
@@ -495,11 +652,11 @@ function TrackingScreen({
           href={`https://wa.me/?text=${encodeURIComponent("Voy en camino con CabrasGo, sigue mi viaje.")}`}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 text-center bg-cg-surfaceAlt rounded-xl py-3 text-sm font-semibold"
+          className="flex-1 text-center bg-cg-surfaceAlt border border-slate-200 rounded-xl py-3 text-sm font-bold"
         >
           Compartir viaje
         </a>
-        <a href={`tel:${live.sosPhone}`} className="flex-1 text-center bg-cg-danger text-white rounded-xl py-3 text-sm font-semibold">
+        <a href={`tel:${live.sosPhone}`} className="flex-1 text-center bg-cg-danger text-white rounded-xl py-3 text-sm font-bold">
           SOS · 133
         </a>
       </div>

@@ -178,17 +178,17 @@ export function AdminApp() {
         <div className="flex items-center gap-3">
           <img src="/logo.png" className="w-9 h-9 rounded-lg" />
           <div>
-            <p className="font-bold leading-none">CabrasGo · Centro de Control</p>
-            <p className="text-xs opacity-70">Las Cabras · Peumo · San Vicente · Lago Rapel</p>
+            <p className="font-extrabold tracking-tight leading-none">CabrasGo · Centro de Control</p>
+            <p className="text-xs opacity-60 mt-1">Las Cabras · Peumo · San Vicente · Lago Rapel</p>
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
-          <span className="opacity-80">{user.firstName} {user.lastName}</span>
-          <button onClick={logout} className="text-red-300 font-medium">Salir</button>
+          <span className="opacity-80 font-medium">{user.firstName} {user.lastName}</span>
+          <button onClick={logout} className="text-red-300 font-semibold">Salir</button>
         </div>
       </header>
 
-      <nav className="flex gap-1 bg-white shadow-sm px-6">
+      <nav className="flex gap-1 bg-white border-b border-slate-200 px-6 overflow-x-auto">
         {([
           ["kpis", "KPIs en Vivo"],
           ["flota", "Radar de Flotas"],
@@ -200,8 +200,8 @@ export function AdminApp() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-3 text-sm font-semibold border-b-2 ${
-              tab === key ? "border-cg-accent text-cg-accent" : "border-transparent text-slate-500"
+            className={`px-4 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
+              tab === key ? "border-cg-primary text-cg-primary" : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
             {label}
@@ -248,21 +248,21 @@ function KpiTab({ kpis }: { kpis: Kpis }) {
         {cards.map((c, i) => (
           <div
             key={c.label}
-            className="bg-cg-surface rounded-2xl p-4 shadow-sm card-enter"
+            className="bg-cg-surface border border-slate-200 rounded-2xl p-4 card-enter"
             style={{ animationDelay: `${i * 40}ms` }}
           >
-            <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">{c.label}</p>
-            <p className="text-2xl font-bold">{c.value}</p>
+            <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">{c.label}</p>
+            <p className="text-3xl font-extrabold tabular-nums tracking-tight">{c.value}</p>
           </div>
         ))}
       </div>
-      <div className="bg-cg-surface rounded-2xl p-4 shadow-sm">
-        <p className="text-sm font-semibold mb-3">Estado de flota</p>
+      <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
+        <p className="text-sm font-bold mb-3">Estado de flota</p>
         <div className="flex gap-4 flex-wrap">
           {kpis.fleetStatus.map((s) => (
-            <div key={s.status} className="bg-cg-surfaceAlt rounded-xl px-4 py-3">
-              <p className="text-xs text-slate-500">{STATUS_LABEL[s.status] ?? s.status}</p>
-              <p className="text-xl font-bold">{s.count}</p>
+            <div key={s.status} className="bg-cg-surfaceAlt rounded-xl px-4 py-3 min-w-[110px]">
+              <p className="text-xs text-slate-500 font-medium">{STATUS_LABEL[s.status] ?? s.status}</p>
+              <p className="text-2xl font-extrabold tabular-nums">{s.count}</p>
             </div>
           ))}
         </div>
@@ -297,7 +297,7 @@ function FleetTab({
             }))}
         />
       </div>
-      <div className="bg-cg-surface rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead className="bg-cg-surfaceAlt text-slate-500">
           <tr>
@@ -313,7 +313,7 @@ function FleetTab({
         </thead>
         <tbody>
           {drivers.map((d) => (
-            <tr key={d.id} className="border-t border-slate-100">
+            <tr key={d.id} className="border-t border-slate-100 hover:bg-cg-surfaceAlt transition-colors">
               <td className="px-4 py-3 font-medium">
                 {d.name} <span className="text-xs text-slate-400">⭐{d.rating.toFixed(1)}</span>
                 {d.isVip && <span className="ml-1 text-[10px] font-bold bg-amber-400 text-black rounded-full px-2 py-0.5">VIP</span>}
@@ -372,7 +372,7 @@ function GeofenceTab({ zones, onUpdate }: { zones: GeofenceZone[]; onUpdate: (co
       </div>
       <div className="grid md:grid-cols-2 gap-4">
       {zones.map((z) => (
-        <div key={z.code} className="bg-cg-surface rounded-2xl p-4 shadow-sm">
+        <div key={z.code} className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-2">
             <p className="font-semibold">{z.name}</p>
             {z.isHighDemand && <span className="text-xs bg-amber-50 text-cg-warning px-2 py-1 rounded-full font-semibold">Alta demanda</span>}
@@ -421,7 +421,7 @@ function FuelTab({ fuel, onSync }: { fuel: FuelBenchmark[]; onSync: () => void }
           Sincronizar CNE ahora
         </button>
       </div>
-      <div className="bg-cg-surface rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-cg-surfaceAlt text-slate-500">
             <tr>
@@ -435,7 +435,7 @@ function FuelTab({ fuel, onSync }: { fuel: FuelBenchmark[]; onSync: () => void }
           </thead>
           <tbody>
             {fuel.map((f) => (
-              <tr key={f.id} className="border-t border-slate-100">
+              <tr key={f.id} className="border-t border-slate-100 hover:bg-cg-surfaceAlt transition-colors">
                 <td className="px-4 py-3 font-medium">{f.stationName}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{f.stationAddress}</td>
                 <td className="px-4 py-3">{f.comuna}</td>
@@ -486,22 +486,22 @@ function NegocioTab({
       <div>
         <p className="text-sm font-semibold text-slate-600 mb-2">Fuentes de ingreso de la plataforma</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-cg-surface rounded-2xl p-4 shadow-sm">
+          <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Comisión ({overview.commission.commissionPct}%)</p>
             <p className="text-xl font-bold">{formatClp(overview.commission.revenueClp)}</p>
             <p className="text-xs text-slate-400 mt-1">GMV {formatClp(overview.commission.gmvClp)}</p>
           </div>
-          <div className="bg-cg-surface rounded-2xl p-4 shadow-sm">
+          <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Penalidades de cancelación</p>
             <p className="text-xl font-bold">{formatClp(overview.cancellations.revenueClp)}</p>
             <p className="text-xs text-slate-400 mt-1">{overview.cancellations.chargedCount} viajes cobrados</p>
           </div>
-          <div className="bg-cg-surface rounded-2xl p-4 shadow-sm">
+          <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Suscripciones VIP (proyectado/mes)</p>
             <p className="text-xl font-bold">{formatClp(overview.vip.projectedMonthlyRevenueClp)}</p>
             <p className="text-xs text-slate-400 mt-1">{overview.vip.vipDriverCount} conductores VIP</p>
           </div>
-          <div className="bg-cg-surface rounded-2xl p-4 shadow-sm">
+          <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
             <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Bonos pagados (meta semanal)</p>
             <p className="text-xl font-bold">{formatClp(overview.weeklyBonus.totalPaidClp)}</p>
             <p className="text-xs text-slate-400 mt-1">{overview.weeklyBonus.grantCount} bonos otorgados</p>
@@ -512,7 +512,7 @@ function NegocioTab({
       {/* Commission + cancellation + bonus + VIP config */}
       <div>
         <p className="text-sm font-semibold text-slate-600 mb-2">Configuración de comisión y penalidades</p>
-        <div className="bg-cg-surface rounded-2xl p-4 shadow-sm grid md:grid-cols-2 gap-4">
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 grid md:grid-cols-2 gap-4">
           <ConfigField
             label={`Comisión plataforma (%) — rango ${overview.commission.minPct}-${overview.commission.maxPct}`}
             defaultValue={Number(config.commissionPct)}
@@ -552,14 +552,14 @@ function NegocioTab({
       {/* VIP drivers */}
       <div>
         <p className="text-sm font-semibold text-slate-600 mb-2">Conductores VIP ({vipDrivers.length})</p>
-        <div className="bg-cg-surface rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden">
           {vipDrivers.length === 0 ? (
             <p className="text-sm text-slate-400 p-4">Ningún conductor VIP todavía.</p>
           ) : (
             <table className="w-full text-sm">
               <tbody>
                 {vipDrivers.map((d) => (
-                  <tr key={d.id} className="border-t border-slate-100">
+                  <tr key={d.id} className="border-t border-slate-100 hover:bg-cg-surfaceAlt transition-colors">
                     <td className="px-4 py-3 font-medium">{d.name}</td>
                     <td className="px-4 py-3 text-xs text-slate-400">{formatPatente(d.plate)}</td>
                     <td className="px-4 py-3 text-right">
@@ -578,7 +578,7 @@ function NegocioTab({
       {/* Weekly bonuses */}
       <div>
         <p className="text-sm font-semibold text-slate-600 mb-2">Bonos por meta semanal otorgados</p>
-        <div className="bg-cg-surface rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden">
           {bonuses.length === 0 ? (
             <p className="text-sm text-slate-400 p-4">Sin bonos otorgados aún.</p>
           ) : (
@@ -593,7 +593,7 @@ function NegocioTab({
               </thead>
               <tbody>
                 {bonuses.map((b) => (
-                  <tr key={b.id} className="border-t border-slate-100">
+                  <tr key={b.id} className="border-t border-slate-100 hover:bg-cg-surfaceAlt transition-colors">
                     <td className="px-4 py-3 font-medium">{b.driverName}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">{new Date(b.weekStart).toLocaleDateString("es-CL")}</td>
                     <td className="px-4 py-3">{b.tripsCompleted}</td>
@@ -611,7 +611,7 @@ function NegocioTab({
         <p className="text-sm font-semibold text-slate-600 mb-2">
           Campañas publicitarias in-app ({overview.ads.activeCount} activas / {overview.ads.totalCount})
         </p>
-        <div className="bg-cg-surface rounded-2xl p-4 shadow-sm mb-3 grid md:grid-cols-4 gap-2">
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-3 grid md:grid-cols-4 gap-2">
           <input
             value={newAdTitle}
             onChange={(e) => setNewAdTitle(e.target.value)}
@@ -645,7 +645,7 @@ function NegocioTab({
             Crear campaña
           </button>
         </div>
-        <div className="bg-cg-surface rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-cg-surfaceAlt text-slate-500">
               <tr>
@@ -657,7 +657,7 @@ function NegocioTab({
             </thead>
             <tbody>
               {ads.map((ad) => (
-                <tr key={ad.id} className="border-t border-slate-100">
+                <tr key={ad.id} className="border-t border-slate-100 hover:bg-cg-surfaceAlt transition-colors">
                   <td className="px-4 py-3">
                     <p className="font-medium">{ad.title}</p>
                     <p className="text-xs text-slate-400">{ad.bodyText}</p>
@@ -712,7 +712,7 @@ function ConfigField({
 
 function UsersTab({ users }: { users: any[] }) {
   return (
-    <div className="bg-cg-surface rounded-2xl shadow-sm overflow-hidden">
+    <div className="bg-cg-surface border border-slate-200 rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead className="bg-cg-surfaceAlt text-slate-500">
           <tr>
@@ -724,7 +724,7 @@ function UsersTab({ users }: { users: any[] }) {
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.id} className="border-t border-slate-100">
+            <tr key={u.id} className="border-t border-slate-100 hover:bg-cg-surfaceAlt transition-colors">
               <td className="px-4 py-3 font-medium">{u.firstName} {u.lastName}</td>
               <td className="px-4 py-3">{u.rut}</td>
               <td className="px-4 py-3">{u.role}</td>

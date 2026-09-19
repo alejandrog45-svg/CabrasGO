@@ -15,7 +15,8 @@ export default defineConfig({
         theme_color: "#0f766e",
         background_color: "#ffffff",
         display: "standalone",
-        start_url: "/pasajero",
+        start_url: "/",
+        scope: "/",
         icons: [
           { src: "/logo.png", sizes: "240x240", type: "image/png" },
           { src: "/logo.png", sizes: "240x240", type: "image/png", purpose: "maskable" },

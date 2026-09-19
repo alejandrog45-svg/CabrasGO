@@ -72,6 +72,20 @@ driverRouter.post("/status/toggle", requireAuth("DRIVER"), async (req: AuthedReq
   res.json({ operationalStatus: updated.operationalStatus });
 });
 
+driverRouter.post("/location/ping", requireAuth("DRIVER"), async (req: AuthedRequest, res) => {
+  const { lat, lng } = req.body as { lat: number; lng: number };
+  const driver = await getDriverOrFail(req, res);
+  if (!driver) return;
+  if (driver.operationalStatus === "OFFLINE") {
+    return res.json({ ok: false, reason: "offline" });
+  }
+  await prisma.driver.update({
+    where: { id: driver.id },
+    data: { currentLatitude: lat, currentLongitude: lng, lastPingAt: new Date() },
+  });
+  res.json({ ok: true });
+});
+
 driverRouter.post("/trips/:id/accept", requireAuth("DRIVER"), async (req: AuthedRequest, res) => {
   const driver = await getDriverOrFail(req, res);
   if (!driver) return;

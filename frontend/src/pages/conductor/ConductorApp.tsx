@@ -58,7 +58,10 @@ export function ConductorApp() {
     weeklyBonuses: any[];
   } | null>(null);
   const [ads, setAds] = useState<{ id: string; title: string; bodyText: string; imageUrl: string | null }[]>([]);
+  const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
   const timerRef = useRef<number | null>(null);
+  const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const watchIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!user || user.role !== "DRIVER") {
@@ -74,10 +77,53 @@ export function ConductorApp() {
       setOffer(payload);
       setCountdown(payload.expiresInSecs);
     });
+
+    // El GPS se activa apenas abre la app, no recién al conectar/tocar "Conectado".
+    if (!navigator.geolocation) {
+      setGpsStatus("unsupported");
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          lastPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setGpsStatus("active");
+        },
+        () => setGpsStatus("denied"),
+        { timeout: 5000 }
+      );
+    }
+
     return () => {
       socket.off("trip:dispatch:offer");
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
   }, []);
+
+  // Mientras está "Conectado" hace seguimiento continuo y reporta posición cada pocos segundos.
+  useEffect(() => {
+    const online = profile?.operationalStatus && profile.operationalStatus !== "OFFLINE";
+    if (!online || !navigator.geolocation) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        lastPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setGpsStatus("active");
+        api.post("/driver/location/ping", lastPosRef.current).catch(() => {});
+      },
+      () => setGpsStatus("denied"),
+      { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 }
+    );
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [profile?.operationalStatus]);
 
   useEffect(() => {
     if (!offer) return;
@@ -116,18 +162,20 @@ export function ConductorApp() {
   async function toggleStatus() {
     if (!profile) return;
     const next = profile.operationalStatus === "OFFLINE" ? "AVAILABLE" : "OFFLINE";
-    const geo = await new Promise<GeolocationPosition | null>((resolve) => {
-      if (!navigator.geolocation) return resolve(null);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => resolve(pos),
-        () => resolve(null),
-        { timeout: 3000 }
-      );
-    });
+    let pos = lastPosRef.current;
+    if (!pos && navigator.geolocation) {
+      pos = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+          () => resolve(null),
+          { timeout: 3000 }
+        );
+      });
+    }
     const body: any = { status: next, batteryPct: 70 + Math.floor(Math.random() * 30) };
-    if (geo) {
-      body.lat = geo.coords.latitude;
-      body.lng = geo.coords.longitude;
+    if (pos) {
+      body.lat = pos.lat;
+      body.lng = pos.lng;
     }
     await api.post("/driver/status/toggle", body);
     loadProfile();
@@ -202,22 +250,45 @@ export function ConductorApp() {
 
   return (
     <div className="min-h-screen bg-cg-darkBg text-cg-darkPrimary page-enter">
-      <header className="flex items-center justify-between px-4 py-3 bg-cg-darkSurface">
+      <header className="flex items-center justify-between px-4 py-3 bg-cg-darkSurface border-b border-slate-800">
         <div className="flex items-center gap-2">
           <img src="/logo.png" className="w-8 h-8 rounded-lg" />
-          <span className="font-bold">CabrasGo Conductor</span>
+          <span className="font-extrabold tracking-tight">CabrasGo Conductor</span>
         </div>
-        <button onClick={logout} className="text-cg-danger text-sm font-medium">
-          Salir
-        </button>
+        <div className="flex items-center gap-3">
+          <span
+            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${
+              gpsStatus === "active"
+                ? "bg-emerald-500/15 text-cg-accent"
+                : gpsStatus === "denied" || gpsStatus === "unsupported"
+                ? "bg-red-500/15 text-cg-danger"
+                : "bg-slate-700 text-slate-400"
+            }`}
+            title={
+              gpsStatus === "active"
+                ? "GPS activo"
+                : gpsStatus === "denied"
+                ? "GPS denegado — actívalo en ajustes del navegador"
+                : gpsStatus === "unsupported"
+                ? "GPS no disponible en este dispositivo"
+                : "Solicitando GPS..."
+            }
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${gpsStatus === "active" ? "bg-cg-accent animate-pulse" : "bg-current"}`} />
+            GPS
+          </span>
+          <button onClick={logout} className="text-cg-danger text-sm font-semibold">
+            Salir
+          </button>
+        </div>
       </header>
 
-      <nav className="flex bg-cg-darkSurfaceAlt">
+      <nav className="flex bg-cg-darkSurfaceAlt border-b border-slate-800">
         {(["home", "wallet"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-sm font-semibold ${tab === t ? "text-cg-accent border-b-2 border-cg-accent" : "text-slate-400"}`}
+            className={`flex-1 py-3 text-sm font-bold ${tab === t ? "text-cg-accent border-b-2 border-cg-accent" : "text-slate-500"}`}
           >
             {t === "home" ? "Operación" : "Billetera"}
           </button>
@@ -228,31 +299,34 @@ export function ConductorApp() {
         {tab === "home" && (
           <div>
             <AdBanner ads={ads} dark />
-            <div className="bg-cg-darkSurface rounded-2xl p-4 mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400">{profile.model} · {formatPatente(profile.plate)}</p>
-                <p className="font-semibold flex items-center gap-2">
-                  {profile.name}
-                  {profile.isVip && (
-                    <span className="text-[10px] font-bold bg-amber-400 text-black rounded-full px-2 py-0.5">VIP</span>
-                  )}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">⭐ {profile.rating.toFixed(1)} · {profile.totalTrips} viajes</p>
+            <div className="bg-cg-darkSurface border border-slate-800 rounded-2xl p-4 mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${online ? "bg-cg-accent animate-pulse" : "bg-slate-600"}`} />
+                <div>
+                  <p className="text-xs text-slate-400">{profile.model} · {formatPatente(profile.plate)}</p>
+                  <p className="font-bold flex items-center gap-2">
+                    {profile.name}
+                    {profile.isVip && (
+                      <span className="text-[10px] font-bold bg-amber-400 text-black rounded-full px-2 py-0.5">VIP</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">⭐ {profile.rating.toFixed(1)} · {profile.totalTrips} viajes</p>
+                </div>
               </div>
               <button
                 onClick={toggleStatus}
                 disabled={!!activeTrip}
-                className={`rounded-full px-5 py-3 font-bold text-sm ${
-                  online ? "bg-cg-accent text-black" : "bg-slate-700 text-slate-300"
+                className={`rounded-full px-5 py-3 font-bold text-sm transition ${
+                  online ? "bg-cg-accent text-black" : "bg-slate-800 text-slate-300 border border-slate-700"
                 } disabled:opacity-50`}
               >
                 {online ? "Conectado" : "Desconectado"}
               </button>
             </div>
 
-            <div className="bg-cg-darkSurface rounded-2xl p-4 mb-4">
-              <p className="text-xs text-slate-400 uppercase tracking-wide">Saldo billetera</p>
-              <p className="text-2xl font-bold text-cg-earningsBright">{formatClp(profile.walletBalanceClp)}</p>
+            <div className="bg-cg-darkSurface border border-slate-800 rounded-2xl p-4 mb-4">
+              <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold">Saldo billetera</p>
+              <p className="text-3xl font-extrabold text-cg-earningsBright tabular-nums tracking-tight">{formatClp(profile.walletBalanceClp)}</p>
             </div>
 
             {activeTrip && (
@@ -339,8 +413,8 @@ export function ConductorApp() {
       </main>
 
       {offer && (
-        <div className="fixed inset-0 bg-black/80 flex items-end sm:items-center justify-center z-50">
-          <div className="bg-cg-darkSurface rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6">
+        <div className="fixed inset-0 bg-black/85 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-cg-darkSurface border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md p-6 shadow-[0_0_32px_-4px_rgba(16,185,129,0.25)]">
             <div className="flex justify-center mb-4">
               <div className="relative w-20 h-20">
                 <svg className="w-20 h-20 -rotate-90">
@@ -349,29 +423,29 @@ export function ConductorApp() {
                     cx="40"
                     cy="40"
                     r="34"
-                    stroke="#10B981"
+                    stroke={countdown <= 5 ? "#F59E0B" : "#10B981"}
                     strokeWidth="6"
                     fill="none"
                     strokeDasharray={2 * Math.PI * 34}
                     strokeDashoffset={2 * Math.PI * 34 * (1 - countdown / 15)}
                   />
                 </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-xl font-bold">{countdown}</span>
+                <span className="absolute inset-0 flex items-center justify-center text-2xl font-extrabold tabular-nums">{countdown}</span>
               </div>
             </div>
-            <p className="text-center text-3xl font-bold text-cg-earningsBright mb-1">{formatClp(offer.netEarningsClp)}</p>
-            <p className="text-center text-xs text-slate-400 mb-4">Ganancia neta (bruto {formatClp(offer.grossFareClp)})</p>
-            <div className="bg-cg-darkSurfaceAlt rounded-xl p-3 mb-4 text-sm space-y-1">
-              <p><span className="text-slate-400">Recogida:</span> {offer.pickupAddress} ({offer.pickupDistanceKm} km)</p>
-              <p><span className="text-slate-400">Destino:</span> {offer.destAddress}</p>
-              <p className="text-cg-warning">{offer.terrainType.includes("RIPIO") ? "⚠ Ripio compactado" : "Asfalto"} {offer.requires4x4 ? "· Requiere 4x4" : ""}</p>
+            <p className="text-center text-4xl font-extrabold text-cg-earningsBright mb-1 tabular-nums tracking-tight">{formatClp(offer.netEarningsClp)}</p>
+            <p className="text-center text-xs text-slate-400 mb-4 font-medium">Ganancia neta (bruto {formatClp(offer.grossFareClp)})</p>
+            <div className="bg-cg-darkSurfaceAlt border border-slate-800 rounded-xl p-3 mb-4 text-sm space-y-1.5">
+              <p><span className="text-slate-400">Recogida:</span> <span className="font-semibold">{offer.pickupAddress}</span> ({offer.pickupDistanceKm} km)</p>
+              <p><span className="text-slate-400">Destino:</span> <span className="font-semibold">{offer.destAddress}</span></p>
+              <p className="text-cg-warning font-semibold">{offer.terrainType.includes("RIPIO") ? "⚠ Ripio compactado" : "Asfalto"} {offer.requires4x4 ? "· Requiere 4x4" : ""}</p>
             </div>
             <div className="flex gap-3">
-              <button onClick={declineOffer} className="flex-1 bg-slate-700 rounded-xl py-3 font-semibold transition-all duration-150 active:scale-95">
+              <button onClick={declineOffer} className="w-[35%] bg-slate-800 border border-slate-700 rounded-xl py-4 font-bold transition-all duration-150 active:scale-95">
                 Rechazar
               </button>
-              <button onClick={acceptOffer} className="flex-1 bg-cg-accent text-black rounded-xl py-3 font-bold transition-all duration-150 active:scale-95 shadow-lg shadow-emerald-500/20">
-                Aceptar
+              <button onClick={acceptOffer} className="flex-1 bg-cg-accent text-black rounded-xl py-4 font-extrabold transition-all duration-150 active:scale-95 shadow-lg shadow-emerald-500/20">
+                Aceptar Viaje
               </button>
             </div>
           </div>
@@ -398,10 +472,10 @@ function ActiveTripCard({
 }) {
   const canCancel = trip.status === "ACCEPTED" || trip.status === "DRIVER_ARRIVED";
   return (
-    <div className="bg-cg-darkSurface rounded-2xl p-4 mb-4">
-      <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Viaje activo · {trip.status}</p>
-      <p className="font-semibold mb-1">{trip.originAddress} → {trip.destAddress}</p>
-      <p className="text-cg-earningsBright font-bold mb-3">{formatClp(trip.driverNetClp)}</p>
+    <div className="bg-cg-darkSurface border border-slate-800 rounded-2xl p-4 mb-4">
+      <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Viaje activo · {trip.status}</p>
+      <p className="font-bold mb-1">{trip.originAddress} → {trip.destAddress}</p>
+      <p className="text-cg-earningsBright font-extrabold text-lg mb-3 tabular-nums">{formatClp(trip.driverNetClp)}</p>
 
       {canCancel ? (
         <div className="flex gap-2 mb-2">
@@ -409,7 +483,7 @@ function ActiveTripCard({
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value)}
             placeholder="PIN del pasajero"
-            className="flex-1 bg-cg-darkSurfaceAlt rounded-xl px-4 py-3 text-sm tracking-widest"
+            className="flex-1 bg-cg-darkSurfaceAlt border border-slate-700 rounded-xl px-4 py-3 text-sm tracking-widest font-bold"
             maxLength={4}
           />
           <button onClick={onVerify} className="bg-cg-accent text-black font-bold rounded-xl px-4">
