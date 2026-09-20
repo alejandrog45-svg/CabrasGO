@@ -9,6 +9,7 @@ import { ManualModal } from "../../components/ManualModal";
 import { PASAJERO_MANUAL } from "../../lib/manuals";
 import { useInstallPrompt } from "../../lib/useInstallPrompt";
 import { fetchRoute } from "../../lib/routing";
+import { TripChat } from "../../components/TripChat";
 
 interface Landmark {
   code: string;
@@ -1085,6 +1086,10 @@ function TrackingScreen({
           )}
         </div>
       )}
+
+      <div className="mb-4">
+        <TripChat tripId={live.tripId} apiBase="/passenger" myRole="PASSENGER" />
+      </div>
 
       <div className="flex gap-2 mb-4">
         <a

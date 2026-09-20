@@ -197,7 +197,26 @@ model Trip {
   cancelledBy        String?
   cancellationFeeClp Int     @default(0)
 
-  rating Rating?
+  rating   Rating?
+  messages TripMessage[]
+}
+
+// Chat en vivo pasajero<->conductor, acotado a un viaje. Sin edición ni
+// borrado — es un registro simple de mensajes de texto, entregados en
+// tiempo real por socket (evento "trip:message" en el room `trip_${tripId}`)
+// y persistidos acá para que quien entra tarde a la pantalla vea el
+// historial completo del viaje.
+model TripMessage {
+  id     String @id @default(uuid())
+  tripId String
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  senderId String
+  /// PASSENGER | DRIVER
+  senderRole String
+  text       String
+
+  createdAt DateTime @default(now())
 }
 
 model Rating {

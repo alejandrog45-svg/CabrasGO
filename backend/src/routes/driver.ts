@@ -206,6 +206,34 @@ driverRouter.get("/trips/active", requireAuth("DRIVER"), async (req: AuthedReque
   res.json({ trip });
 });
 
+const CHATTABLE_STATUSES = ["ACCEPTED", "DRIVER_ARRIVED", "IN_PROGRESS"];
+
+driverRouter.get("/trips/:id/messages", requireAuth("DRIVER"), async (req: AuthedRequest, res) => {
+  const driver = await getDriverOrFail(req, res);
+  if (!driver) return;
+  const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+  if (!trip || trip.driverId !== driver.id) return res.status(404).json({ error: "Viaje no encontrado" });
+  const messages = await prisma.tripMessage.findMany({ where: { tripId: trip.id }, orderBy: { createdAt: "asc" } });
+  res.json({ messages });
+});
+
+driverRouter.post("/trips/:id/messages", requireAuth("DRIVER"), async (req: AuthedRequest, res) => {
+  const driver = await getDriverOrFail(req, res);
+  if (!driver) return;
+  const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+  if (!trip || trip.driverId !== driver.id) return res.status(404).json({ error: "Viaje no encontrado" });
+  if (!CHATTABLE_STATUSES.includes(trip.status)) {
+    return res.status(409).json({ error: "Este viaje ya no admite mensajes" });
+  }
+  const text = String(req.body?.text ?? "").trim().slice(0, 500);
+  if (!text) return res.status(400).json({ error: "Mensaje vacío" });
+  const message = await prisma.tripMessage.create({
+    data: { tripId: trip.id, senderId: req.auth!.userId, senderRole: "DRIVER", text },
+  });
+  getIo().to(`trip_${trip.id}`).emit("trip:message", message);
+  res.json({ message });
+});
+
 driverRouter.get("/trips/history", requireAuth("DRIVER"), async (req: AuthedRequest, res) => {
   const driver = await getDriverOrFail(req, res);
   if (!driver) return;

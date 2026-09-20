@@ -300,6 +300,33 @@ passengerRouter.get("/trips/:id/live", requireAuth("PASSENGER"), async (req: Aut
   });
 });
 
+// Chat en vivo del viaje — solo mientras el viaje no esté cerrado
+// (COMPLETED/CANCELLED), para que no se puedan mandar mensajes a un viaje
+// que ya terminó.
+const CHATTABLE_STATUSES = ["ACCEPTED", "DRIVER_ARRIVED", "IN_PROGRESS"];
+
+passengerRouter.get("/trips/:id/messages", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+  if (!trip || trip.passengerId !== req.auth!.userId) return res.status(404).json({ error: "Viaje no encontrado" });
+  const messages = await prisma.tripMessage.findMany({ where: { tripId: trip.id }, orderBy: { createdAt: "asc" } });
+  res.json({ messages });
+});
+
+passengerRouter.post("/trips/:id/messages", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const trip = await prisma.trip.findUnique({ where: { id: req.params.id } });
+  if (!trip || trip.passengerId !== req.auth!.userId) return res.status(404).json({ error: "Viaje no encontrado" });
+  if (!CHATTABLE_STATUSES.includes(trip.status)) {
+    return res.status(409).json({ error: "Este viaje ya no admite mensajes" });
+  }
+  const text = String(req.body?.text ?? "").trim().slice(0, 500);
+  if (!text) return res.status(400).json({ error: "Mensaje vacío" });
+  const message = await prisma.tripMessage.create({
+    data: { tripId: trip.id, senderId: req.auth!.userId, senderRole: "PASSENGER", text },
+  });
+  getIo().to(`trip_${trip.id}`).emit("trip:message", message);
+  res.json({ message });
+});
+
 // Cancellation penalty (point 3): once a driver has accepted, cancelling has
 // a cost. Before acceptance (still DISPATCHING) it's free — no driver has
 // committed time yet.

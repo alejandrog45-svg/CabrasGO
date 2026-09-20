@@ -15,6 +15,24 @@ export async function runBootstrapMigrations() {
     console.error("bootstrap migration (gasoline95Clp) falló:", e);
   }
 
+  try {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "TripMessage" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "tripId" TEXT NOT NULL REFERENCES "Trip"("id"),
+        "senderId" TEXT NOT NULL,
+        "senderRole" TEXT NOT NULL,
+        "text" TEXT NOT NULL,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "TripMessage_tripId_idx" ON "TripMessage"("tripId");`
+    );
+  } catch (e) {
+    console.error("bootstrap migration (TripMessage) falló:", e);
+  }
+
   // Corrección de dato de negocio (2026-09-20): la fila seedeada como
   // "Petrobras El Manzano" está mal — la estación real en esa ubicación es
   // Copec (verificado contra bencinaenlinea.cl/CNE). Solo actualiza si la

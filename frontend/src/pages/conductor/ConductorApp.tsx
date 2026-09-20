@@ -7,6 +7,7 @@ import { AdBanner } from "../../components/AdBanner";
 import { ManualModal } from "../../components/ManualModal";
 import { CONDUCTOR_MANUAL } from "../../lib/manuals";
 import { useInstallPrompt } from "../../lib/useInstallPrompt";
+import { TripChat } from "../../components/TripChat";
 
 interface DriverProfile {
   id: string;
@@ -582,10 +583,12 @@ function ActiveTripCard({
       )}
 
       {canCancel && (
-        <button onClick={onCancel} className="w-full text-center text-cg-danger text-xs font-semibold py-1">
+        <button onClick={onCancel} className="w-full text-center text-cg-danger text-xs font-semibold py-1 mb-3">
           Cancelar viaje (aplica penalidad)
         </button>
       )}
+
+      <TripChat tripId={trip.id} apiBase="/driver" myRole="DRIVER" dark />
     </div>
   );
 }
