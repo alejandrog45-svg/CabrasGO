@@ -126,6 +126,7 @@ model FuelBenchmark {
   stationAddress String   @default("")
   comuna         String   @default("Las Cabras")
   gasoline93Clp  Int
+  gasoline95Clp  Int?
   dieselClp      Int
   sourceAgency   String   @default("CNE_ENAP")
   reportedAt     DateTime @default(now())

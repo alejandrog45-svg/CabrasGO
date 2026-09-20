@@ -96,10 +96,15 @@ All constants live in `backend/src/lib/fare.ts`.
   Peumo, San Vicente de Tagua Tagua, around the Lago Rapel basin.
 - **Geofence zones** (exact codes, do not rename): `LAS_CABRAS_CENTRO`,
   `MARINA_GOLF_RAPEL`, `LLALLAUQUEN`, `EL_MANZANO`.
-- **Fuel stations** (real, seeded with today's date): Copec Las Cabras
-  Centro (Av. Carlos Valdovinos 450) — gasolina 93 $1.294/L, diésel
-  $1.042/L; Shell Cruce Las Cabras (Ruta H-66 km 28) — $1.298 / $1.046;
-  Petrobras El Manzano (Camino Ribereño s/n) — $1.312 / $1.060.
+- **Fuel stations** (real): Copec Las Cabras Centro (Av. Carlos Valdovinos
+  450) — gasolina 93 $1.294/L, diésel $1.042/L; Shell Cruce Las Cabras
+  (Ruta H-66 km 28) — $1.298 / $1.046; **Copec El Manzano** (Ruta H-66
+  lote A y sitio 3, El Manzano, Rapel) — corregido 2026-09-20, la estación
+  seedeada como "Petrobras El Manzano" era incorrecta (verificado contra
+  bencinaenlinea.cl/CNE): gasolina 93 $1.490/L, **gasolina 95 $1.523/L**,
+  diésel $1.340/L. `FuelBenchmark.gasoline95Clp` es nullable — solo esta
+  estación tiene el dato real; las otras dos no tienen 95 cargado todavía
+  (no inventar, dejar `null` hasta confirmar precio real).
 - **10 GPS landmarks** (validated, real coordinates — see
   `backend/src/lib/landmarks.ts`): Plaza de Armas de Las Cabras (default
   passenger origin), Marina Golf Rapel, El Manzano, Balneario Llallauquén,

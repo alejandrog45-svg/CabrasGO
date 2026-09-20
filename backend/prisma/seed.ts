@@ -154,12 +154,16 @@ async function main() {
         sourceAgency: "CNE_ENAP",
       },
       {
-        stationName: "Petrobras El Manzano",
-        stationCode: "PETROBRAS_EL_MANZANO",
-        stationAddress: "Camino Ribereño s/n, El Manzano, Las Cabras",
+        // Corregido 2026-09-20: la estación real en El Manzano es Copec, no
+        // Petrobras — verificado contra bencinaenlinea.cl (CNE), precios del
+        // día para gasolina 93/95 y diésel.
+        stationName: "Copec El Manzano",
+        stationCode: "COPEC_EL_MANZANO",
+        stationAddress: "Ruta H-66 lote A y sitio 3, El Manzano, Rapel, Las Cabras",
         comuna: "Las Cabras",
-        gasoline93Clp: 1312,
-        dieselClp: 1060,
+        gasoline93Clp: 1490,
+        gasoline95Clp: 1523,
+        dieselClp: 1340,
         sourceAgency: "CNE_ENAP",
       },
     ],

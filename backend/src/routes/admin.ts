@@ -136,6 +136,7 @@ adminRouter.post("/fuel/sync-cne", requireAuth("ADMIN"), async (_req, res) => {
       where: { id: b.id },
       data: {
         gasoline93Clp: b.gasoline93Clp + delta,
+        ...(b.gasoline95Clp != null ? { gasoline95Clp: b.gasoline95Clp + delta } : {}),
         dieselClp: b.dieselClp + Math.round(delta * 0.8),
         reportedAt: new Date(),
       },

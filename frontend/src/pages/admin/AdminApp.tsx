@@ -50,6 +50,7 @@ interface FuelBenchmark {
   stationAddress: string;
   comuna: string;
   gasoline93Clp: number;
+  gasoline95Clp: number | null;
   dieselClp: number;
   reportedAt: string;
 }
@@ -474,6 +475,7 @@ function FuelTab({ fuel, onSync }: { fuel: FuelBenchmark[]; onSync: () => void }
               <th className="text-left px-4 py-3">Dirección</th>
               <th className="text-left px-4 py-3">Comuna</th>
               <th className="text-left px-4 py-3">Gasolina 93</th>
+              <th className="text-left px-4 py-3">Gasolina 95</th>
               <th className="text-left px-4 py-3">Diésel</th>
               <th className="text-left px-4 py-3">Actualizado</th>
             </tr>
@@ -485,6 +487,7 @@ function FuelTab({ fuel, onSync }: { fuel: FuelBenchmark[]; onSync: () => void }
                 <td className="px-4 py-3 text-xs text-slate-500">{f.stationAddress}</td>
                 <td className="px-4 py-3">{f.comuna}</td>
                 <td className="px-4 py-3">{formatClp(f.gasoline93Clp)}/L</td>
+                <td className="px-4 py-3">{f.gasoline95Clp != null ? `${formatClp(f.gasoline95Clp)}/L` : "—"}</td>
                 <td className="px-4 py-3">{formatClp(f.dieselClp)}/L</td>
                 <td className="px-4 py-3 text-xs text-slate-400">{new Date(f.reportedAt).toLocaleString("es-CL")}</td>
               </tr>
