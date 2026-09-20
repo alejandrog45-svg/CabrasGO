@@ -534,7 +534,8 @@ function ActiveTripCard({
     <div className="bg-cg-darkSurface border border-slate-800 rounded-2xl p-4 mb-4">
       <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Viaje activo · {trip.status}</p>
       <p className="font-bold mb-1">{trip.originAddress} → {trip.destAddress}</p>
-      <p className="text-cg-earningsBright font-extrabold text-lg mb-3 tabular-nums">{formatClp(trip.driverNetClp)}</p>
+      <p className="text-cg-earningsBright font-extrabold text-lg tabular-nums">{formatClp(trip.driverNetClp)}</p>
+      <p className="text-xs text-slate-400 mb-3">Tu ganancia neta · tarifa del viaje {formatClp(trip.fareGrossClp)}</p>
 
       {canCancel ? (
         <div className="flex gap-2 mb-2">

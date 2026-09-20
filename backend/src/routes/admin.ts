@@ -356,6 +356,56 @@ adminRouter.get("/business/overview", requireAuth("ADMIN", "DISPATCHER"), async 
   });
 });
 
+// Tabla de viajes con ruta y las 3 cifras de dinero (precio pagado por el
+// pasajero, ganancia del conductor, comisión de la plataforma) — para que el
+// admin vea de un vistazo qué se cobró y cómo se repartió, viaje por viaje.
+// Por defecto trae los últimos 50 sin filtrar por estado (incluye viajes en
+// curso/cancelados, no solo completados) para que sirva también como
+// historial general, no solo de conciliación financiera.
+adminRouter.get("/trips", requireAuth("ADMIN", "DISPATCHER"), async (req, res) => {
+  const now = new Date();
+  const to = req.query.to ? new Date(`${req.query.to}T23:59:59.999`) : now;
+  const from = req.query.from
+    ? new Date(`${req.query.from}T00:00:00.000`)
+    : new Date(to.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const statusFilter = typeof req.query.status === "string" ? req.query.status : undefined;
+
+  const trips = await prisma.trip.findMany({
+    where: {
+      requestedAt: { gte: from, lte: to },
+      ...(statusFilter ? { status: statusFilter } : {}),
+    },
+    orderBy: { requestedAt: "desc" },
+    take: 100,
+    include: {
+      passenger: { select: { firstName: true, lastName: true } },
+      driver: { include: { user: { select: { firstName: true, lastName: true } } } },
+    },
+  });
+
+  res.json({
+    range: { from: toIsoDateOnly(from), to: toIsoDateOnly(to) },
+    trips: trips.map((t) => ({
+      id: t.id,
+      status: t.status,
+      requestedAt: t.requestedAt,
+      completedAt: t.completedAt,
+      originAddress: t.originAddress,
+      destAddress: t.destAddress,
+      passengerName: `${t.passenger.firstName} ${t.passenger.lastName}`,
+      driverName: t.driver ? `${t.driver.user.firstName} ${t.driver.user.lastName}` : null,
+      fareGrossClp: t.fareGrossClp,
+      driverNetClp: t.driverNetClp,
+      platformFeeClp: t.platformFeeClp,
+      paymentMethod: t.paymentMethod,
+    })),
+  });
+});
+
+function toIsoDateOnly(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
 // Reporte de negocio con rango de fechas: ingresos, viajes, ranking de
 // conductores y uso por zona. Todo se calcula sobre requestedAt (fecha del
 // pedido) para que un viaje aparezca en el día en que el pasajero lo pidió,

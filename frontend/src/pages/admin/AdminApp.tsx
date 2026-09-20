@@ -997,6 +997,135 @@ function ReportesTab() {
           </tbody>
         </table>
       </ReportTable>
+
+      <TripsDetailTable />
+    </div>
+  );
+}
+
+interface TripRow {
+  id: string;
+  status: string;
+  requestedAt: string;
+  originAddress: string;
+  destAddress: string;
+  passengerName: string;
+  driverName: string | null;
+  fareGrossClp: number;
+  driverNetClp: number;
+  platformFeeClp: number;
+  paymentMethod: string;
+}
+
+const TRIP_STATUS_LABEL: Record<string, string> = {
+  SCHEDULED: "Programado",
+  REQUESTED: "Pedido",
+  DISPATCHING: "Buscando conductor",
+  ACCEPTED: "Aceptado",
+  DRIVER_ARRIVED: "Conductor en el lugar",
+  IN_PROGRESS: "En curso",
+  COMPLETED: "Completado",
+  CANCELLED: "Cancelado",
+};
+
+// Historial de viajes con ruta y las 3 cifras de dinero — precio pagado por
+// el pasajero, ganancia del conductor y comisión de la plataforma (admin) —
+// viaje por viaje. Trae los últimos 7 días por defecto, no solo completados,
+// para que sirva también para ver viajes en curso.
+function TripsDetailTable() {
+  const today = new Date();
+  const weekAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const [from, setFrom] = useState(toIsoDate(weekAgo));
+  const [to, setTo] = useState(toIsoDate(today));
+  const [trips, setTrips] = useState<TripRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const d = await api.get<{ trips: TripRow[] }>(`/admin/trips?from=${from}&to=${to}`);
+      setTrips(d.trips);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mb-8">
+      <div className="flex flex-wrap items-end gap-3 mb-3 bg-cg-surface border border-slate-200 rounded-2xl p-4">
+        <div>
+          <label className="block text-xs text-slate-400 font-semibold mb-1">Desde</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-400 font-semibold mb-1">Hasta</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
+        </div>
+        <button onClick={load} disabled={loading} className="bg-cg-adminAccent text-white rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50">
+          {loading ? "Cargando..." : "Actualizar"}
+        </button>
+      </div>
+
+      <ReportTable
+        title="Viajes: ruta, precio pagado y reparto"
+        onExport={() =>
+          downloadCsv(
+            `cabrasgo_viajes_${from}_${to}.csv`,
+            [
+              ["Fecha", "Estado", "Origen", "Destino", "Pasajero", "Conductor", "Precio pagado CLP", "Ganancia chofer CLP", "Ganancia admin CLP"],
+              ...(trips ?? []).map((t) => [
+                new Date(t.requestedAt).toLocaleString("es-CL"),
+                TRIP_STATUS_LABEL[t.status] ?? t.status,
+                t.originAddress,
+                t.destAddress,
+                t.passengerName,
+                t.driverName ?? "—",
+                t.fareGrossClp,
+                t.driverNetClp,
+                t.platformFeeClp,
+              ]),
+            ]
+          )
+        }
+      >
+        <table className="w-full text-sm">
+          <thead className="bg-cg-surfaceAlt text-slate-500">
+            <tr>
+              <th className="text-left px-4 py-3">Fecha</th>
+              <th className="text-left px-4 py-3">Ruta</th>
+              <th className="text-left px-4 py-3">Pasajero</th>
+              <th className="text-left px-4 py-3">Conductor</th>
+              <th className="text-left px-4 py-3">Estado</th>
+              <th className="text-left px-4 py-3">Precio pagado</th>
+              <th className="text-left px-4 py-3">Ganancia chofer</th>
+              <th className="text-left px-4 py-3">Ganancia admin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(trips ?? []).map((t) => (
+              <tr key={t.id} className="border-t border-slate-100">
+                <td className="px-4 py-3 whitespace-nowrap">{new Date(t.requestedAt).toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" })}</td>
+                <td className="px-4 py-3 max-w-xs truncate" title={`${t.originAddress} → ${t.destAddress}`}>{t.originAddress} → {t.destAddress}</td>
+                <td className="px-4 py-3">{t.passengerName}</td>
+                <td className="px-4 py-3">{t.driverName ?? "—"}</td>
+                <td className="px-4 py-3">{TRIP_STATUS_LABEL[t.status] ?? t.status}</td>
+                <td className="px-4 py-3 font-semibold">{formatClp(t.fareGrossClp)}</td>
+                <td className="px-4 py-3">{formatClp(t.driverNetClp)}</td>
+                <td className="px-4 py-3">{formatClp(t.platformFeeClp)}</td>
+              </tr>
+            ))}
+            {trips !== null && trips.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">Sin viajes en este rango.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </ReportTable>
     </div>
   );
 }

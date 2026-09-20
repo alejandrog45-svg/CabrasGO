@@ -212,23 +212,39 @@ export function PasajeroApp() {
   }
 
   useEffect(() => {
-    if (!tripId || screen !== "tracking") return;
+    // Se conecta al room del viaje apenas existe un tripId — no solo en "tracking" —
+    // para que un evento de socket (conductor acepta / entra en curso) llegue aunque
+    // el pasajero siga en la pantalla "Buscando conductor cercano".
+    if (!tripId || (screen !== "tracking" && screen !== "dispatching")) return;
     const socket = getSocket();
     socket.emit("join:trip", tripId);
     const onPos = (payload: any) => {
       if (payload.tripId === tripId) setLive((l: any) => ({ ...l, ...payload }));
     };
     const onStatus = (payload: any) => {
-      if (payload.tripId === tripId) setLive((l: any) => ({ ...l, status: payload.status }));
+      if (payload.tripId !== tripId) return;
+      setLive((l: any) => ({ ...l, status: payload.status }));
+      if (payload.status && payload.status !== "DISPATCHING") setScreen("tracking");
     };
     socket.on("trip:live_position", onPos);
     socket.on("trip:status", onStatus);
+
+    // El setInterval puede quedar pausado/lento si el navegador manda la pestaña a
+    // segundo plano (común en celular al cambiar de app) — al volver a foco se
+    // fuerza un refresco inmediato en vez de esperar el próximo tick.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshLive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
 
     const interval = window.setInterval(refreshLive, 2500);
     pollRef.current = interval;
     return () => {
       socket.off("trip:live_position", onPos);
       socket.off("trip:status", onStatus);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
       window.clearInterval(interval);
     };
   }, [tripId, screen]);
@@ -237,12 +253,9 @@ export function PasajeroApp() {
     if (!tripId) return;
     try {
       const data = await api.get<any>(`/passenger/trips/${tripId}/live`);
-      setLive((l: any) => ({ ...data, status: l?.status || data.status }));
-      if (data.status === "IN_PROGRESS" || data.status === "DRIVER_ARRIVED" || data.status === "ACCEPTED") {
+      setLive((l: any) => ({ ...l, ...data }));
+      if (data.status && data.status !== "DISPATCHING") {
         setScreen("tracking");
-      }
-      if (data.paymentStatus === "CAPTURED" || data.paymentStatus === "AUTHORIZED") {
-        // stays on tracking until trip completed
       }
     } catch {
       /* ignore transient errors while polling */
@@ -344,26 +357,13 @@ export function PasajeroApp() {
       });
       setTripId(res.tripId);
       setPin(res.pin);
-      pollUntilAccepted(res.tripId);
+      // El useEffect de arriba (gateado por tripId + screen "dispatching"/"tracking")
+      // ya arranca el socket + polling de refreshLive apenas cambian tripId/screen —
+      // no hace falta un segundo intervalo en paralelo aquí.
     } catch (e: any) {
       setError(e.message);
       setScreen("categories");
     }
-  }
-
-  async function pollUntilAccepted(id: string) {
-    const timer = window.setInterval(async () => {
-      try {
-        const data = await api.get<any>(`/passenger/trips/${id}/live`);
-        setLive(data);
-        if (data.status && data.status !== "DISPATCHING") {
-          window.clearInterval(timer);
-          setScreen("tracking");
-        }
-      } catch {
-        /* ignore */
-      }
-    }, 2000);
   }
 
   async function cancelTrip() {
@@ -424,7 +424,7 @@ export function PasajeroApp() {
               📲
             </button>
           )}
-          <button onClick={() => setScreen("history")} aria-label="Mis viajes" title="Mis viajes" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
+          <button onClick={() => { loadHistory(); setScreen("history"); }} aria-label="Mis viajes" title="Mis viajes" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
             🕓
           </button>
           <button onClick={() => setShowManual(true)} aria-label="Manual de uso" title="Manual de uso" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
@@ -449,6 +449,7 @@ export function PasajeroApp() {
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
+                      loadHistory();
                       setScreen("history");
                     }}
                     className="w-full text-left text-sm py-1.5 text-slate-600"
