@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  GoogleAuthProvider,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  ConfirmationResult,
+} from "firebase/auth";
 import { api, setSession, AuthUser } from "../lib/api";
+import { firebaseAuth } from "../lib/firebase";
+import { normalizeChileanPhoneToE164 } from "../lib/phone";
 
 const ROLE_HOME: Record<string, string> = {
   PASSENGER: "/pasajero",
@@ -95,6 +106,17 @@ function IconBank() {
   );
 }
 
+function IconGoogle() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-5 h-5">
+      <path fill="#4285F4" d="M23.5 12.3c0-.85-.08-1.66-.22-2.44H12v4.62h6.47c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.55-5.17 3.55-8.8Z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.25v3.1C3.23 21.3 7.3 24 12 24Z" />
+      <path fill="#FBBC05" d="M5.27 14.29a7.2 7.2 0 0 1 0-4.58v-3.1H1.25a12 12 0 0 0 0 10.78l4.02-3.1Z" />
+      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0 7.3 0 3.23 2.7 1.25 6.61l4.02 3.1C6.22 6.86 8.87 4.75 12 4.75Z" />
+    </svg>
+  );
+}
+
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <label className="block text-xs font-bold text-slate-500 mb-1.5">{children}</label>;
 }
@@ -141,12 +163,114 @@ export function Login() {
   const [vehicleCategory, setVehicleCategory] = useState<"STANDARD_SEDAN" | "RURAL_4X4_XL">("STANDARD_SEDAN");
   const [bankAccountRut, setBankAccountRut] = useState("");
 
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [phoneMode, setPhoneMode] = useState<"closed" | "input" | "code">("closed");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+
   useEffect(() => {
     api
       .get<{ password: string; users: typeof demoUsers }>("/auth/demo-accounts")
       .then((d) => setDemoUsers(d.users))
       .catch(() => {});
   }, []);
+
+  // Si signInWithPopup fue bloqueado (Safari iOS / webviews de apps) y caímos
+  // a signInWithRedirect, el resultado vuelve acá al recargar la página.
+  useEffect(() => {
+    getRedirectResult(firebaseAuth)
+      .then(async (result) => {
+        if (result?.user) {
+          const idToken = await result.user.getIdToken();
+          await finishFirebaseLogin(idToken);
+        }
+      })
+      .catch((e) => setError(e.message || "No se pudo completar el login con Google"));
+    return () => {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
+  }, []);
+
+  async function finishFirebaseLogin(idToken: string) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.post<{ token: string; user: AuthUser }>("/auth/firebase", { idToken });
+      setSession(res.token, res.user);
+      navigate(ROLE_HOME[res.user.role] || "/");
+    } catch (e: any) {
+      setError(e.message || "No se pudo iniciar sesión");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setGoogleLoading(true);
+    setError("");
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(firebaseAuth, provider);
+      const idToken = await result.user.getIdToken();
+      await finishFirebaseLogin(idToken);
+    } catch (e: any) {
+      const blockedCodes = ["auth/popup-blocked", "auth/popup-closed-by-user", "auth/cancelled-popup-request"];
+      if (blockedCodes.includes(e.code)) {
+        // Safari iOS / webviews de Instagram-WhatsApp bloquean el popup —
+        // seguimos con redirect, que sí funciona ahí.
+        await signInWithRedirect(firebaseAuth, provider);
+        return;
+      }
+      setError(e.message || "No se pudo iniciar sesión con Google");
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
+
+  function getRecaptcha(): RecaptchaVerifier {
+    if (!recaptchaRef.current) {
+      recaptchaRef.current = new RecaptchaVerifier(firebaseAuth, "recaptcha-container", {
+        size: "invisible",
+      });
+    }
+    return recaptchaRef.current;
+  }
+
+  async function sendPhoneCode() {
+    setError("");
+    const e164 = normalizeChileanPhoneToE164(phoneInput);
+    if (!e164) {
+      setError("Ingresa un celular chileno válido (ej. 9 1234 5678)");
+      return;
+    }
+    setLoading(true);
+    try {
+      confirmationRef.current = await signInWithPhoneNumber(firebaseAuth, e164, getRecaptcha());
+      setPhoneMode("code");
+    } catch (e: any) {
+      setError(e.message || "No se pudo enviar el SMS");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirmPhoneCode() {
+    if (!confirmationRef.current) return;
+    setError("");
+    setLoading(true);
+    try {
+      const result = await confirmationRef.current.confirm(otpCode);
+      const idToken = await result.user.getIdToken();
+      await finishFirebaseLogin(idToken);
+    } catch (e: any) {
+      setError(e.message || "Código incorrecto");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function doLogin(loginEmail: string) {
     setLoading(true);
@@ -481,6 +605,78 @@ export function Login() {
             {loading ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
+
+        <div className="flex items-center gap-3 my-4">
+          <div className="h-px bg-slate-200 flex-1" />
+          <span className="text-[11px] uppercase tracking-wide text-slate-400">o continúa con</span>
+          <div className="h-px bg-slate-200 flex-1" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          disabled={googleLoading}
+          className="w-full h-[52px] flex items-center justify-center gap-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl font-semibold text-slate-700 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)] disabled:opacity-60"
+        >
+          <IconGoogle />
+          {googleLoading ? "Conectando..." : "Continuar con Google"}
+        </button>
+
+        {phoneMode === "closed" && (
+          <button
+            type="button"
+            onClick={() => setPhoneMode("input")}
+            className="w-full h-[52px] mt-2.5 flex items-center justify-center gap-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl font-semibold text-slate-700 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+          >
+            <IconPhone />
+            Continuar con mi celular
+          </button>
+        )}
+
+        {phoneMode === "input" && (
+          <div className="mt-2.5 space-y-2">
+            <IconField
+              icon={<IconPhone />}
+              accentClass="focus:border-cg-accent focus:ring-cg-accent/20"
+              placeholder="9 1234 5678"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={sendPhoneCode}
+              disabled={loading}
+              className="w-full h-[48px] bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl disabled:opacity-60"
+            >
+              {loading ? "Enviando código..." : "Enviarme un código por SMS"}
+            </button>
+          </div>
+        )}
+
+        {phoneMode === "code" && (
+          <div className="mt-2.5 space-y-2">
+            <p className="text-xs text-slate-500">Te enviamos un código por SMS a {phoneInput}</p>
+            <IconField
+              icon={<IconLock />}
+              accentClass="focus:border-cg-accent focus:ring-cg-accent/20"
+              placeholder="Código de 6 dígitos"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={confirmPhoneCode}
+              disabled={loading}
+              className="w-full h-[48px] bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl disabled:opacity-60"
+            >
+              {loading ? "Verificando..." : "Confirmar código"}
+            </button>
+          </div>
+        )}
+
+        {/* Contenedor dedicado para el reCAPTCHA invisible — separado del
+            formulario para que no se re-renderice/destruya con StrictMode. */}
+        <div id="recaptcha-container" />
 
         <button onClick={() => { setMode("register"); setError(""); }} className="w-full text-center text-sm text-cg-accent font-semibold mt-4">
           Crear cuenta nueva

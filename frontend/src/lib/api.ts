@@ -2,10 +2,10 @@ const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
 
 export interface AuthUser {
   id: string;
-  rut: string;
+  rut: string | null;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null;
   phone: string;
   role: "PASSENGER" | "DRIVER" | "ADMIN" | "DISPATCHER";
   ratingAvg: string | number;

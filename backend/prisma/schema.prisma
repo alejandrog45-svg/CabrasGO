@@ -51,12 +51,15 @@ generator client {
 
 model User {
   id           String   @id @default(uuid())
-  rut          String   @unique
+  rut          String?  @unique
   firstName    String
   lastName     String
-  email        String   @unique
+  email        String?  @unique
   phone        String
-  passwordHash String
+  passwordHash String?
+  /// UID de Firebase Auth para login social (Google) / teléfono — null para
+  /// cuentas email+password creadas por /auth/register o /auth/register-driver
+  firebaseUid  String?  @unique
   /// PASSENGER | DRIVER | ADMIN | DISPATCHER
   role         String   @default("PASSENGER")
   ratingAvg    Decimal  @default(5.00)
