@@ -7,6 +7,7 @@ import { passengerRouter, dispatchDueScheduledTrips } from "./routes/passenger";
 import { driverRouter } from "./routes/driver";
 import { adminRouter } from "./routes/admin";
 import { initSockets } from "./ws/socket";
+import { runBootstrapMigrations } from "./lib/bootstrapMigrations";
 
 const app = express();
 app.use(cors());
@@ -30,8 +31,10 @@ const PORT = Number(process.env.PORT) || 8080;
 const server = createServer(app);
 initSockets(server);
 
-server.listen(PORT, () => {
-  console.log(`CabrasGo backend escuchando en http://localhost:${PORT}`);
+runBootstrapMigrations().finally(() => {
+  server.listen(PORT, () => {
+    console.log(`CabrasGo backend escuchando en http://localhost:${PORT}`);
+  });
 });
 
 // Dispara viajes "programados para más tarde" cuando llega su hora.
