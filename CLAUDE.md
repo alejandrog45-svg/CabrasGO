@@ -109,7 +109,12 @@ All constants live in `backend/src/lib/fare.ts`.
   `backend/src/lib/landmarks.ts`): Plaza de Armas de Las Cabras (default
   passenger origin), Marina Golf Rapel, El Manzano, Balneario Llallauquén,
   Hospital de Las Cabras, Cruce Las Cabras, Punta Verde, Cocalán, Cruce
-  Peumo–San Vicente, Cerro Llallauquén (repetidora).
+  Peumo–San Vicente, Cerro Llallauquén (repetidora). **Balneario
+  Llallauquén corregido 2026-09-20**: tenía ~4.5km de desvío (lat
+  -34.2711/-71.4589, apuntaba al centro del pueblo en vez de al balneario);
+  corregido a -34.2382735/-71.4311504 ("Playas de Llallauquén", ribera del
+  lago), confirmado por Nominatim/OpenStreetMap y contrastado con Gemini —
+  el dueño aprobó la coordenada explícitamente antes de aplicarla.
 - **Payment methods**: `WEBPAY_ONECLICK` (Transbank),
   `CUENTARUT_BANCOESTADO` (BancoEstado), `CASH`.
 - **RUT format**: `12.345.678-9`, módulo-11 check digit

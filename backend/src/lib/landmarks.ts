@@ -34,9 +34,9 @@ export const LANDMARKS: Landmark[] = [
   {
     code: "LLALLAUQUEN",
     name: "Balneario Llallauquén",
-    lat: -34.2711,
-    lng: -71.4589,
-    note: "Camino rural lacustre",
+    lat: -34.2382735,
+    lng: -71.4311504,
+    note: "Camino rural lacustre — corregido 2026-09-20 (desvío de ~4.5km, confirmado por Nominatim/OSM y Gemini contra 'Playas de Llallauquén')",
   },
   {
     code: "HOSPITAL_LAS_CABRAS",
