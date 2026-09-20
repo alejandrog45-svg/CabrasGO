@@ -184,9 +184,9 @@ export function AdminApp() {
 
   return (
     <div className="min-h-screen bg-cg-bg text-cg-primary page-enter">
-      <header className="flex items-center justify-between px-6 py-4 bg-cg-primary text-white">
+      <header className="flex items-center justify-between px-6 py-4 bg-cg-adminAccent text-white">
         <div className="flex items-center gap-3">
-          <img src="/logo.png" className="w-9 h-9 rounded-lg" />
+          <img src="/logo-admin.jpg" className="w-9 h-9 rounded-lg" />
           <div>
             <p className="font-extrabold tracking-tight leading-none">CabrasGo · Centro de Control</p>
             <p className="text-xs opacity-60 mt-1">Las Cabras · Peumo · San Vicente · Lago Rapel</p>
@@ -230,7 +230,7 @@ export function AdminApp() {
             key={key}
             onClick={() => setTab(key)}
             className={`px-4 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
-              tab === key ? "border-cg-primary text-cg-primary" : "border-transparent text-slate-400 hover:text-slate-600"
+              tab === key ? "border-cg-adminAccent text-cg-adminAccent" : "border-transparent text-slate-400 hover:text-slate-600"
             }`}
           >
             {label}
@@ -462,7 +462,7 @@ function FuelTab({ fuel, onSync }: { fuel: FuelBenchmark[]; onSync: () => void }
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-slate-500">Fuente: CNE / ENAP (sandbox) · gatilla re-indexación con variación &gt; $25 CLP/L</p>
-        <button onClick={onSync} className="bg-cg-accent text-white font-semibold rounded-xl px-4 py-2 text-sm">
+        <button onClick={onSync} className="bg-cg-adminAccent text-white font-semibold rounded-xl px-4 py-2 text-sm">
           Sincronizar CNE ahora
         </button>
       </div>
@@ -685,7 +685,7 @@ function NegocioTab({
               setNewAdTitle("");
               setNewAdBody("");
             }}
-            className="md:col-span-4 bg-cg-accent text-white font-semibold rounded-xl py-2 text-sm"
+            className="md:col-span-4 bg-cg-adminAccent text-white font-semibold rounded-xl py-2 text-sm"
           >
             Crear campaña
           </button>
@@ -862,7 +862,7 @@ function ReportesTab() {
           <label className="block text-xs text-slate-400 font-semibold mb-1">Hasta</label>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-slate-200 rounded-lg px-3 py-2 text-sm" />
         </div>
-        <button onClick={load} disabled={loading} className="bg-cg-primary text-white rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50">
+        <button onClick={load} disabled={loading} className="bg-cg-adminAccent text-white rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-50">
           {loading ? "Cargando..." : "Actualizar"}
         </button>
         <p className="text-xs text-slate-400 ml-auto">Rango: {data.range.from} a {data.range.to}</p>

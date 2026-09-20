@@ -19,6 +19,9 @@ export default {
           darkSurfaceAlt: "#131B2E",
           darkPrimary: "#F8FAFC",
           earningsBright: "#34D399",
+          driver: "#2563EB",
+          driverBright: "#3B82F6",
+          adminAccent: "#DC2626",
         },
       },
       borderRadius: {

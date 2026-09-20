@@ -61,7 +61,7 @@ export function ConductorApp() {
     weeklyBonuses: any[];
   } | null>(null);
   const [ads, setAds] = useState<{ id: string; title: string; bodyText: string; imageUrl: string | null }[]>([]);
-  const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
+  const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "weak" | "denied" | "unsupported">("pending");
   const [showManual, setShowManual] = useState(false);
   const { canInstall, promptInstall } = useInstallPrompt();
   const timerRef = useRef<number | null>(null);
@@ -112,7 +112,17 @@ export function ConductorApp() {
         const online = profileRef.current?.operationalStatus && profileRef.current.operationalStatus !== "OFFLINE";
         if (online) api.post("/driver/location/ping", lastPosRef.current).catch(() => {});
       },
-      () => setGpsStatus("denied"),
+      (err) => {
+        // PERMISSION_DENIED (1) es el único caso real de "sin permiso" — bloquea con el
+        // modal. POSITION_UNAVAILABLE (2) y TIMEOUT (3) son señal débil/momentánea, muy
+        // común en zonas de ripio del área de cobertura: no bloquear, watchPosition sigue
+        // reintentando solo y retoma "active" en cuanto llegue una posición nueva.
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsStatus("denied");
+        } else {
+          setGpsStatus((s) => (s === "denied" || s === "unsupported" ? s : "weak"));
+        }
+      },
       { enableHighAccuracy: true, maximumAge: 4000, timeout: 8000 }
     );
   }
@@ -244,7 +254,7 @@ export function ConductorApp() {
     <div className="min-h-screen bg-cg-darkBg text-cg-darkPrimary page-enter">
       <header className="flex items-center justify-between px-4 py-3 bg-cg-darkSurface border-b border-slate-800">
         <div className="flex items-center gap-2">
-          <img src="/logo.png" className="w-8 h-8 rounded-lg" />
+          <img src="/logo-conductor.jpg" className="w-8 h-8 rounded-lg" />
           <span className="font-extrabold tracking-tight">CabrasGo Conductor</span>
         </div>
         <div className="flex items-center gap-3">
@@ -252,6 +262,8 @@ export function ConductorApp() {
             className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full ${
               gpsStatus === "active"
                 ? "bg-emerald-500/15 text-cg-accent"
+                : gpsStatus === "weak"
+                ? "bg-amber-500/15 text-amber-400"
                 : gpsStatus === "denied" || gpsStatus === "unsupported"
                 ? "bg-red-500/15 text-cg-danger"
                 : "bg-slate-700 text-slate-400"
@@ -259,6 +271,8 @@ export function ConductorApp() {
             title={
               gpsStatus === "active"
                 ? "GPS activo"
+                : gpsStatus === "weak"
+                ? "Señal GPS débil — buscando tu ubicación, puedes seguir usando la app"
                 : gpsStatus === "denied"
                 ? "GPS denegado — actívalo en ajustes del navegador"
                 : gpsStatus === "unsupported"
@@ -266,7 +280,7 @@ export function ConductorApp() {
                 : "Solicitando GPS..."
             }
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${gpsStatus === "active" ? "bg-cg-accent animate-pulse" : "bg-current"}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${gpsStatus === "active" ? "bg-cg-accent animate-pulse" : gpsStatus === "weak" ? "bg-amber-400 animate-pulse" : "bg-current"}`} />
             GPS
           </span>
           {canInstall && (
@@ -298,7 +312,7 @@ export function ConductorApp() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 py-3 text-sm font-bold ${tab === t ? "text-cg-accent border-b-2 border-cg-accent" : "text-slate-500"}`}
+            className={`flex-1 py-3 text-sm font-bold ${tab === t ? "text-cg-driverBright border-b-2 border-cg-driver" : "text-slate-500"}`}
           >
             {t === "home" ? "Operación" : "Billetera"}
           </button>
@@ -404,7 +418,7 @@ export function ConductorApp() {
                 onChange={(e) => setPayoutAmount(e.target.value)}
                 className="flex-1 bg-cg-darkSurfaceAlt rounded-xl px-4 py-3 text-sm"
               />
-              <button onClick={requestPayout} className="bg-cg-accent text-black font-semibold rounded-xl px-4">
+              <button onClick={requestPayout} className="bg-cg-driver text-white font-semibold rounded-xl px-4">
                 Transferir
               </button>
             </div>
@@ -454,7 +468,7 @@ export function ConductorApp() {
               <button onClick={declineOffer} className="w-[35%] bg-slate-800 border border-slate-700 rounded-xl py-4 font-bold transition-all duration-150 active:scale-95">
                 Rechazar
               </button>
-              <button onClick={acceptOffer} className="flex-1 bg-cg-accent text-black rounded-xl py-4 font-extrabold transition-all duration-150 active:scale-95 shadow-lg shadow-emerald-500/20">
+              <button onClick={acceptOffer} className="flex-1 bg-cg-driver text-white rounded-xl py-4 font-extrabold transition-all duration-150 active:scale-95 shadow-lg shadow-blue-500/20">
                 Aceptar Viaje
               </button>
             </div>
@@ -475,7 +489,7 @@ export function ConductorApp() {
             {gpsStatus === "denied" && (
               <button
                 onClick={requestGps}
-                className="w-full bg-cg-accent text-black rounded-xl py-3.5 font-extrabold active:scale-95 transition-all duration-150"
+                className="w-full bg-cg-driver text-white rounded-xl py-3.5 font-extrabold active:scale-95 transition-all duration-150"
               >
                 Activar ubicación
               </button>
@@ -531,7 +545,7 @@ function ActiveTripCard({
             className="flex-1 bg-cg-darkSurfaceAlt border border-slate-700 rounded-xl px-4 py-3 text-sm tracking-widest font-bold"
             maxLength={4}
           />
-          <button onClick={onVerify} className="bg-cg-accent text-black font-bold rounded-xl px-4">
+          <button onClick={onVerify} className="bg-cg-driver text-white font-bold rounded-xl px-4">
             Iniciar viaje
           </button>
         </div>
