@@ -70,9 +70,39 @@ export function ConductorApp() {
   const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const profileRef = useRef<DriverProfile | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
+
+  // Mientras el conductor está online, evita que la pantalla se apague y el navegador
+  // pause watchPosition en background (crítico en iOS Safari). El sentinel se libera
+  // solo si la pestaña pasa a segundo plano, por eso se reintenta al volver a foco.
+  useEffect(() => {
+    const online = profile?.operationalStatus && profile.operationalStatus !== "OFFLINE";
+    if (!online || !("wakeLock" in navigator)) return;
+    let cancelled = false;
+    const acquire = () => {
+      navigator.wakeLock
+        .request("screen")
+        .then((sentinel) => {
+          if (cancelled) { sentinel.release().catch(() => {}); return; }
+          wakeLockRef.current = sentinel;
+        })
+        .catch(() => {});
+    };
+    acquire();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") acquire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [profile?.operationalStatus]);
 
   useEffect(() => {
     if (!user || user.role !== "DRIVER") {
@@ -556,12 +586,35 @@ function ActiveTripCard({
   onCancel: () => void;
 }) {
   const canCancel = trip.status === "ACCEPTED" || trip.status === "DRIVER_ARRIVED";
+  const navLat = canCancel ? trip.originLat : trip.destLat;
+  const navLng = canCancel ? trip.originLng : trip.destLng;
   return (
     <div className="bg-cg-darkSurface border border-slate-800 rounded-2xl p-4 mb-4">
       <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1">Viaje activo · {trip.status}</p>
       <p className="font-bold mb-1">{trip.originAddress} → {trip.destAddress}</p>
       <p className="text-cg-earningsBright font-extrabold text-lg tabular-nums">{formatClp(trip.driverNetClp)}</p>
       <p className="text-xs text-slate-400 mb-3">Tu ganancia neta · tarifa del viaje {formatClp(trip.fareGrossClp)}</p>
+
+      {navLat != null && navLng != null && (
+        <div className="flex gap-2 mb-3">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${navLat},${navLng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 text-center bg-cg-darkSurfaceAlt border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-200"
+          >
+            🗺️ Google Maps
+          </a>
+          <a
+            href={`https://waze.com/ul?ll=${navLat},${navLng}&navigate=yes`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 text-center bg-cg-darkSurfaceAlt border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-200"
+          >
+            🧭 Waze
+          </a>
+        </div>
+      )}
 
       {canCancel ? (
         <div className="flex gap-2 mb-2">

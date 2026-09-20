@@ -8,6 +8,14 @@ import { ManualModal } from "../../components/ManualModal";
 import { ADMIN_MANUAL } from "../../lib/manuals";
 import { useInstallPrompt } from "../../lib/useInstallPrompt";
 
+function whatsappApprovalLink(phone: string, name: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const msg = encodeURIComponent(
+    `¡Hola ${name}! Tu cuenta de conductor en CabrasGo ya está verificada. Ya puedes conectarte y recibir viajes.`
+  );
+  return `https://wa.me/${digits}?text=${msg}`;
+}
+
 interface Kpis {
   gmvTodayClp: number;
   activeDrivers: number;
@@ -21,6 +29,7 @@ interface Kpis {
 interface RadarDriver {
   id: string;
   name: string;
+  phone: string;
   plate: string;
   model: string;
   status: string;
@@ -365,14 +374,27 @@ function FleetTab({
               <td className="px-4 py-3">{Math.round(d.speedKmh)} km/h</td>
               <td className="px-4 py-3">{d.batteryPct}%</td>
               <td className="px-4 py-3">
-                <button
-                  onClick={() => onToggleKyc(d.id, !d.isKycVerified)}
-                  className={`text-xs font-semibold rounded-full px-3 py-1 ${
-                    d.isKycVerified ? "bg-emerald-50 text-cg-earnings" : "bg-amber-50 text-amber-700"
-                  }`}
-                >
-                  {d.isKycVerified ? "✅ Verificado" : "⏳ Aprobar"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onToggleKyc(d.id, !d.isKycVerified)}
+                    className={`text-xs font-semibold rounded-full px-3 py-1 ${
+                      d.isKycVerified ? "bg-emerald-50 text-cg-earnings" : "bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {d.isKycVerified ? "✅ Verificado" : "⏳ Aprobar"}
+                  </button>
+                  {d.isKycVerified && d.phone && (
+                    <a
+                      href={whatsappApprovalLink(d.phone, d.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Avisar por WhatsApp"
+                      className="text-xs font-semibold rounded-full px-2 py-1 bg-emerald-500 text-white"
+                    >
+                      💬
+                    </a>
+                  )}
+                </div>
               </td>
               <td className="px-4 py-3">
                 <button

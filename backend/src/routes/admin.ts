@@ -53,6 +53,7 @@ adminRouter.get("/drivers/radar", requireAuth("ADMIN", "DISPATCHER"), async (_re
     drivers: drivers.map((d) => ({
       id: d.id,
       name: `${d.user.firstName} ${d.user.lastName}`,
+      phone: d.user.phone,
       plate: d.vehiclePlate,
       model: d.vehicleModel,
       status: d.operationalStatus,
