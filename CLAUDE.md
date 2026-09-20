@@ -399,21 +399,18 @@ build`/`npm run build` sin errores antes de cada deploy a preview.
   textos de GPS en las 3 apps, `marketing/gen_flyers.py` y los templates de
   post/story de lanzamiento).
 
-### Bug de infraestructura encontrado, NO corregido (requiere decisión)
+### Bug de infraestructura — RESUELTO (2026-09-20, doc, sin Docker)
 
 `backend/prisma/schema.prisma` tiene `provider = "postgresql"` (desde el
-commit `25dde10`, "switch to persistent Postgres") pero `backend/.env` y
-`.env.example` siguen con `DATABASE_URL="file:./dev.db"` (SQLite) y el
-`README.md` documenta el flujo local como si fuera SQLite. Esto significa
-que **el dev local está roto tal como está commiteado** — cualquiera que
-siga el README (`npm run setup && npm run dev`) va a fallar con "the URL
-must start with the protocol postgresql://". Para probar las 3 apps en
-esta sesión se cambió `schema.prisma` a `sqlite` temporalmente, se generó
-Prisma Client, se hizo `db push` + `seed` contra `dev.db`, se probó, y se
-revirtió a `postgresql` antes de cerrar — nada de esto quedó commiteado.
-**Pendiente real**: decidir si el dev local vuelve a SQLite (actualizar
-README si no) o si se documenta cómo levantar un Postgres local (Docker no
-está disponible en este equipo).
+commit `25dde10`) pero `.env.example`/`README.md` seguían documentando
+SQLite — el dev local fallaba con "the URL must start with the protocol
+postgresql://" siguiendo la guía tal cual estaba escrita. Se optó por
+documentar Postgres real (no volver a SQLite, ya que produção usa Postgres
+y mantener dos datasources vivos es más frágil que pedir una connection
+string): `.env.example` y `README.md` ahora piden una Postgres gratis de
+Neon.tech o Supabase (sin tarjeta, sin Docker) en vez de `file:./dev.db`.
+El propio dueño necesita crear esa cuenta y pegar la URL — Claude Code no
+puede provisionarla por él.
 
 ### Verificación pendiente del dueño antes del próximo deploy a producción
 

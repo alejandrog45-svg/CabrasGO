@@ -1,23 +1,28 @@
-// CabrasGo — Prisma schema (SQLite, demo/dev datasource)
+// CabrasGo — Prisma schema (Postgres, used both in dev and in production on
+// Railway — see backend/.env.example and README.md for how to point local
+// dev at a free Postgres instance, e.g. Neon or Supabase)
 //
-// This schema is a SQLite-adapted version of the authoritative Postgres+PostGIS
-// schema from "Fase 1.4 — Manual Técnico y de Integración" (section 2). SQLite
-// differs from the reference Postgres schema in three ways:
+// This schema is a plain-Postgres adaptation of the authoritative
+// Postgres+PostGIS schema from "Fase 1.4 — Manual Técnico y de
+// Integración" (section 2), differing in three ways so it runs on any
+// Postgres host without the PostGIS extension:
 //   1. No PostGIS: GeofenceZone.boundaryPolygon (PostGIS `geometry(Polygon,4326)`)
 //      becomes `boundaryPolygonJson`, a JSON string of [ [lat,lng], ... ]
 //      vertices. Point-in-polygon containment is computed in TypeScript (see
 //      src/lib/geofence.ts) instead of a PostGIS ST_Contains query.
-//   2. No native enum type: Prisma's SQLite connector does not support `enum`,
-//      so every enum from the reference schema (Role, VehicleCategory,
-//      TripStatus, PaymentMethod, PaymentStatus, DriverOperationalStatus)
-//      is a `String` column here. The allowed literal values are documented
-//      next to each field and enforced as TypeScript union types in
-//      src/types.ts — application code never writes an out-of-set value.
+//   2. No enum types: every enum from the reference schema (Role,
+//      VehicleCategory, TripStatus, PaymentMethod, PaymentStatus,
+//      DriverOperationalStatus) is a `String` column here instead. The
+//      allowed literal values are documented next to each field and
+//      enforced as TypeScript union types in src/types.ts — application
+//      code never writes an out-of-set value. (This was originally a
+//      SQLite constraint from an earlier dev setup; kept as-is since it
+//      needs no migration to change back.)
 //   3. No native string array: Rating.feedbackTags (Postgres `String[]`)
 //      becomes `feedbackTagsJson`, a JSON-encoded string decoded in the
 //      application layer.
 //
-// To move to production Postgres+PostGIS, swap the `datasource` block below for:
+// To move to full Postgres+PostGIS, swap the `datasource` block below for:
 //
 //   datasource db {
 //     provider   = "postgresql"

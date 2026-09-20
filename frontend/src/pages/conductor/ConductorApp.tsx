@@ -51,7 +51,8 @@ export function ConductorApp() {
   const [countdown, setCountdown] = useState(15);
   const [activeTrip, setActiveTrip] = useState<any>(null);
   const [pinInput, setPinInput] = useState("");
-  const [tab, setTab] = useState<"home" | "wallet">("home");
+  const [tab, setTab] = useState<"home" | "wallet" | "historial">("home");
+  const [tripHistory, setTripHistory] = useState<any[] | null>(null);
   const [payoutAmount, setPayoutAmount] = useState("");
   const [wallet, setWallet] = useState<{
     walletBalanceClp: number;
@@ -148,6 +149,9 @@ export function ConductorApp() {
   useEffect(() => {
     if (tab === "wallet") {
       api.get<any>("/driver/wallet").then(setWallet);
+    }
+    if (tab === "historial") {
+      api.get<{ trips: any[] }>("/driver/trips/history").then((d) => setTripHistory(d.trips));
     }
   }, [tab]);
 
@@ -308,13 +312,13 @@ export function ConductorApp() {
       </header>
 
       <nav className="flex bg-cg-darkSurfaceAlt border-b border-slate-800">
-        {(["home", "wallet"] as const).map((t) => (
+        {(["home", "wallet", "historial"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`flex-1 py-3 text-sm font-bold ${tab === t ? "text-cg-driverBright border-b-2 border-cg-driver" : "text-slate-500"}`}
           >
-            {t === "home" ? "Operación" : "Billetera"}
+            {t === "home" ? "Operación" : t === "wallet" ? "Billetera" : "Historial"}
           </button>
         ))}
       </nav>
@@ -431,6 +435,27 @@ export function ConductorApp() {
                 </div>
               ))}
               {wallet.payouts.length === 0 && <p className="text-slate-500 text-sm">Sin transferencias aún.</p>}
+            </div>
+          </div>
+        )}
+
+        {tab === "historial" && (
+          <div>
+            <p className="text-sm font-semibold text-slate-400 mb-2">Viajes completados</p>
+            {tripHistory === null && <p className="text-slate-500 text-sm">Cargando...</p>}
+            {tripHistory !== null && tripHistory.length === 0 && (
+              <p className="text-slate-500 text-sm text-center py-10">Todavía no tienes viajes completados.</p>
+            )}
+            <div className="space-y-2">
+              {(tripHistory ?? []).map((t) => (
+                <div key={t.id} className="bg-cg-darkSurface border border-slate-800 rounded-2xl p-4">
+                  <p className="text-xs text-slate-500">
+                    {t.completedAt ? new Date(t.completedAt).toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" }) : ""}
+                  </p>
+                  <p className="font-semibold text-sm mt-1">{t.originAddress} → {t.destAddress}</p>
+                  <p className="text-cg-earningsBright font-bold mt-1 tabular-nums">{formatClp(t.driverNetClp)}</p>
+                </div>
+              ))}
             </div>
           </div>
         )}

@@ -6,7 +6,7 @@ Pasajero, Conductor and Admin — talk to a single Node/TypeScript backend over
 REST + WebSockets.
 
 This is a **working full-stack demo**: real backend logic (fare algorithm,
-trip lifecycle, wallet/payouts, geofencing), a real SQLite database, and a
+trip lifecycle, wallet/payouts, geofencing), a real Postgres database, and a
 real React frontend wired to it end-to-end. Payment gateways (Transbank
 Webpay, BancoEstado TEF) and the CNE fuel-price feed are **mocked behind the
 same interfaces the spec defines** — clearly marked `sandbox` in the code —
@@ -17,8 +17,15 @@ is required: maps use **Leaflet + OpenStreetMap** tiles.
 
 From the repo root:
 
+The backend needs a real Postgres database — `prisma/schema.prisma` has
+`provider = "postgresql"`, matching production (Railway). There's no bundled
+SQLite fallback and no Docker requirement here: get a free Postgres in ~1
+minute from [Neon](https://neon.tech) or [Supabase](https://supabase.com)
+(no credit card), copy its connection string into `backend/.env`'s
+`DATABASE_URL` (see `backend/.env.example`), then:
+
 ```bash
-npm run setup   # installs backend + frontend deps, provisions the SQLite DB, seeds demo data
+npm run setup   # installs backend + frontend deps, pushes the schema, seeds demo data
 npm run dev     # runs backend (:8080) and frontend (:5173) together
 ```
 
@@ -27,9 +34,14 @@ password `cabrasgo2025` for all of them (the login screen lists every seeded
 account so you can pick one with a click). **These are seed/test accounts,
 not real people** — see "Domain facts" below.
 
-Nothing else is required: `backend/.env.example` ships safe sandbox defaults
-(SQLite file DB, a demo `JWT_SECRET`, placeholder Transbank/BancoEstado/CNE
-keys) and is auto-copied to `backend/.env` on `npm install` if missing.
+`backend/.env.example` ships safe sandbox defaults for everything else (a
+demo `JWT_SECRET`, placeholder Transbank/BancoEstado/CNE keys) and is
+auto-copied to `backend/.env` on `npm install` if missing — only
+`DATABASE_URL` needs a real value from you.
+
+**Never point local dev at the production Railway database** — it holds
+real passenger/driver data; `npm run seed` wipes and reseeds whatever
+`DATABASE_URL` points to.
 
 ### Running the pieces separately
 
@@ -56,8 +68,7 @@ frontend/  Vite + React + TypeScript + Tailwind, one SPA with three role
            (desktop dashboard). Talks to the backend via fetch + Socket.io
            client. Maps: react-leaflet + OpenStreetMap tiles (no API key).
 
-backend/   Express + TypeScript + Prisma ORM + SQLite (file-based, zero
-           external services). Socket.io for the 15s trip-dispatch channel
+backend/   Express + TypeScript + Prisma ORM + Postgres. Socket.io for the 15s trip-dispatch channel
            and driver telemetry. A server-side interval simulates driver
            GPS movement along each active trip's route (no real GPS in this
            environment), so the passenger's live map reflects real backend
@@ -69,14 +80,15 @@ schema, fare algorithm, REST contracts, WebSocket channels) plus the unified
 spec `fases 1.1-1.4` for exact real-world constants — both supplied as the
 authoring reference for this build (not included in the repo).
 
-### Why SQLite instead of Postgres+PostGIS
+### Why Postgres without PostGIS
 
-The reference manual specifies `postgresql + postgis`. For a zero-setup demo
-this repo uses SQLite instead:
+The reference manual specifies `postgresql + postgis`. This build uses plain
+Postgres (both locally and in production on Railway) without the PostGIS
+extension, to avoid needing a Postgres host that supports extensions:
 - `backend/prisma/schema.prisma` has a header comment with the exact
-  Postgres+PostGIS `datasource`/`generator` block to swap back in for
-  production, plus the two other adaptations needed (enums → `String`
-  columns — Prisma's SQLite connector has no native enum support — and
+  PostGIS `datasource`/`generator` block to swap in if a future host
+  supports it, plus the two other adaptations already applied (enums →
+  `String` columns — documented per-field with their allowed values — and
   `String[]` → JSON-encoded string for `Rating.feedbackTags`).
 - Geofence containment (`ST_Contains` in PostGIS) is implemented as a
   standard ray-casting point-in-polygon function in TypeScript:
@@ -181,7 +193,7 @@ real values from the project's spec documents, not invented.
 
 ```
 backend/
-  prisma/schema.prisma   SQLite schema (Postgres+PostGIS alternative documented inline)
+  prisma/schema.prisma   Postgres schema (PostGIS alternative documented inline)
   prisma/seed.ts         Real geofences, fuel benchmarks, demo users/drivers
   src/lib/                fare.ts, geofence.ts, chile.ts, quote.ts, landmarks.ts, auth.ts
   src/routes/             auth.ts, passenger.ts, driver.ts, admin.ts

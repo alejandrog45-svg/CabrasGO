@@ -7,6 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // Se registra a mano en main.tsx (virtual:pwa-register) para poder
+      // recargar la app sola cuando hay una versión nueva — con
+      // injectRegister por defecto, el script inyectado solo hacía
+      // `serviceWorker.register(...)` sin escuchar cuándo el SW nuevo ya
+      // está listo, así que una pestaña abierta podía quedar mostrando un
+      // bug ya arreglado hasta que el usuario la cerrara y reabriera.
+      injectRegister: false,
       includeAssets: ["logo.png"],
       manifest: {
         name: "CabrasGo",
