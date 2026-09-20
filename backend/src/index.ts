@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import { createServer } from "http";
 import { authRouter } from "./routes/auth";
-import { passengerRouter } from "./routes/passenger";
+import { passengerRouter, dispatchDueScheduledTrips } from "./routes/passenger";
 import { driverRouter } from "./routes/driver";
 import { adminRouter } from "./routes/admin";
 import { initSockets } from "./ws/socket";
@@ -33,3 +33,8 @@ initSockets(server);
 server.listen(PORT, () => {
   console.log(`CabrasGo backend escuchando en http://localhost:${PORT}`);
 });
+
+// Dispara viajes "programados para más tarde" cuando llega su hora.
+setInterval(() => {
+  dispatchDueScheduledTrips().catch((e) => console.error("scheduled dispatch error", e));
+}, 30_000);

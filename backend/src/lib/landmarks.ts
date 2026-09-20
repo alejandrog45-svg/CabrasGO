@@ -20,8 +20,8 @@ export const LANDMARKS: Landmark[] = [
   {
     code: "MARINA_GOLF_RAPEL",
     name: "Marina Golf Rapel (Sector Bahía)",
-    lat: -34.2486,
-    lng: -71.4312,
+    lat: -34.1586649,
+    lng: -71.4567144,
     note: "Camino pavimentado/ripio costero — tarifa dinámica estival x1.35",
   },
   {

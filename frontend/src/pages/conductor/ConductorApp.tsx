@@ -6,6 +6,7 @@ import { formatClp, formatPatente } from "../../lib/format";
 import { AdBanner } from "../../components/AdBanner";
 import { ManualModal } from "../../components/ManualModal";
 import { CONDUCTOR_MANUAL } from "../../lib/manuals";
+import { useInstallPrompt } from "../../lib/useInstallPrompt";
 
 interface DriverProfile {
   id: string;
@@ -62,6 +63,7 @@ export function ConductorApp() {
   const [ads, setAds] = useState<{ id: string; title: string; bodyText: string; imageUrl: string | null }[]>([]);
   const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
   const [showManual, setShowManual] = useState(false);
+  const { canInstall, promptInstall } = useInstallPrompt();
   const timerRef = useRef<number | null>(null);
   const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const watchIdRef = useRef<number | null>(null);
@@ -267,6 +269,16 @@ export function ConductorApp() {
             <span className={`w-1.5 h-1.5 rounded-full ${gpsStatus === "active" ? "bg-cg-accent animate-pulse" : "bg-current"}`} />
             GPS
           </span>
+          {canInstall && (
+            <button
+              onClick={promptInstall}
+              aria-label="Instalar app"
+              title="Instalar app"
+              className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-sm"
+            >
+              📲
+            </button>
+          )}
           <button
             onClick={() => setShowManual(true)}
             aria-label="Manual de uso"
@@ -457,8 +469,8 @@ export function ConductorApp() {
             <p className="text-lg font-extrabold mb-2">Activa tu ubicación para continuar</p>
             <p className="text-sm text-slate-400 mb-5">
               {gpsStatus === "unsupported"
-                ? "Este dispositivo o navegador no puede compartir tu ubicación. Probá desde otro celular o actualizá tu navegador para recibir viajes."
-                : "CabrasGo necesita tu ubicación en todo momento para asignarte viajes cercanos y reportar tu posición en el mapa. Sin GPS activo no podés conectarte."}
+                ? "Este dispositivo o navegador no puede compartir tu ubicación. Prueba desde otro celular o actualiza tu navegador para recibir viajes."
+                : "CabrasGo necesita tu ubicación en todo momento para asignarte viajes cercanos y reportar tu posición en el mapa. Sin GPS activo no puedes conectarte."}
             </p>
             {gpsStatus === "denied" && (
               <button
@@ -469,7 +481,7 @@ export function ConductorApp() {
               </button>
             )}
             <p className="text-[11px] text-slate-500 mt-3">
-              Si tu navegador ya bloqueó el permiso, tocá el ícono de candado junto a la dirección del sitio, habilitá "Ubicación" y volvé a tocar el botón.
+              Si tu navegador ya bloqueó el permiso, toca el ícono de candado junto a la dirección del sitio, habilita "Ubicación" y vuelve a tocar el botón.
             </p>
           </div>
         </div>

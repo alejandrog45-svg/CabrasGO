@@ -56,8 +56,10 @@ model User {
   role         String   @default("PASSENGER")
   ratingAvg    Decimal  @default(5.00)
   totalTrips   Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  /// WEBPAY_ONECLICK | CUENTARUT_BANCOESTADO | CASH
+  preferredPaymentMethod String   @default("WEBPAY_ONECLICK")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   passengerTrips  Trip[]   @relation("PassengerTrips")
   driverProfile   Driver?
@@ -136,11 +138,16 @@ model Trip {
   driverId    String?
   driver      Driver? @relation("DriverTrips", fields: [driverId], references: [id])
 
-  /// REQUESTED | DISPATCHING | ACCEPTED | DRIVER_ARRIVED | IN_PROGRESS | COMPLETED | CANCELLED
+  /// SCHEDULED | REQUESTED | DISPATCHING | ACCEPTED | DRIVER_ARRIVED | IN_PROGRESS | COMPLETED | CANCELLED
   status String @default("REQUESTED")
   /// STANDARD_SEDAN | RURAL_4X4_XL
   category        String @default("STANDARD_SEDAN")
   pinVerification String
+
+  // Set only for trips created via "Programar para más tarde" — a background
+  // job (see dispatchDueScheduledTrips in src/routes/passenger.ts) flips
+  // status SCHEDULED -> DISPATCHING once scheduledFor is reached.
+  scheduledFor DateTime?
 
   originAddress String
   originLat     Decimal

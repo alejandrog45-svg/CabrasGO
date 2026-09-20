@@ -7,6 +7,8 @@ import { LiveMap } from "../../components/LiveMap";
 import { AdBanner } from "../../components/AdBanner";
 import { ManualModal } from "../../components/ManualModal";
 import { PASAJERO_MANUAL } from "../../lib/manuals";
+import { useInstallPrompt } from "../../lib/useInstallPrompt";
+import { fetchRoute } from "../../lib/routing";
 
 interface Landmark {
   code: string;
@@ -26,11 +28,24 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
+interface FareBreakdown {
+  baseFlag: number;
+  pavedCost: number;
+  dirtCost: number;
+  timeCost: number;
+  subtotal: number;
+  dynamicMultiplier: number;
+  fuelFactor: number;
+  estimatedMinutes: number;
+  totalFareClp: number;
+}
+
 interface QuoteCategory {
   category: "STANDARD_SEDAN" | "RURAL_4X4_XL";
   etaMinutes: number;
   totalFareClp: number;
   recommended: boolean;
+  breakdown: FareBreakdown;
 }
 
 interface Quote {
@@ -42,7 +57,7 @@ interface Quote {
   fuelPriceClp: number;
 }
 
-type Screen = "home" | "categories" | "dispatching" | "tracking" | "payment" | "rating" | "done";
+type Screen = "home" | "categories" | "dispatching" | "tracking" | "payment" | "rating" | "done" | "history";
 
 const CATEGORY_LABEL: Record<string, string> = {
   STANDARD_SEDAN: "CabrasGo Estándar",
@@ -70,7 +85,23 @@ export function PasajeroApp() {
   const [pin, setPin] = useState<string>("");
   const [live, setLive] = useState<any>(null);
   const [error, setError] = useState("");
-  const [payMethod, setPayMethod] = useState<"WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH">("WEBPAY_ONECLICK");
+  const [payMethod, setPayMethodState] = useState<"WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH">("WEBPAY_ONECLICK");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [scheduledTrips, setScheduledTrips] = useState<
+    { id: string; destAddress: string; scheduledFor: string; fareGrossClp: number }[]
+  >([]);
+  const [tripHistory, setTripHistory] = useState<
+    {
+      id: string;
+      destAddress: string;
+      requestedAt: string;
+      status: string;
+      fareGrossClp: number;
+      paymentMethod: string;
+      driver: { name: string; rating: number } | null;
+      rating: { score: number } | null;
+    }[]
+  >([]);
   const [score, setScore] = useState(5);
   const [tags, setTags] = useState<string[]>([]);
   const [ads, setAds] = useState<{ id: string; title: string; bodyText: string; imageUrl: string | null }[]>([]);
@@ -81,6 +112,8 @@ export function PasajeroApp() {
   const [gpsStatus, setGpsStatus] = useState<"pending" | "active" | "denied" | "unsupported">("pending");
   const [myGeo, setMyGeo] = useState<{ lat: number; lng: number } | null>(null);
   const [showManual, setShowManual] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const { canInstall, promptInstall } = useInstallPrompt();
   const pollRef = useRef<number | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const lastGeocodedRef = useRef<{ lat: number; lng: number; at: number } | null>(null);
@@ -123,6 +156,12 @@ export function PasajeroApp() {
       .get<{ cancellationFeePassengerClp: number }>("/passenger/cancellation-policy")
       .then((d) => setCancelFeeClp(d.cancellationFeePassengerClp))
       .catch(() => {});
+    api
+      .get<{ preferredPaymentMethod: typeof payMethod }>("/passenger/payment-method")
+      .then((d) => setPayMethodState(d.preferredPaymentMethod))
+      .catch(() => {});
+    loadScheduledTrips();
+    loadHistory();
 
     requestGps();
     return () => {
@@ -210,6 +249,47 @@ export function PasajeroApp() {
     }
   }
 
+  function setPayMethod(m: "WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH") {
+    setPayMethodState(m);
+    api.put("/passenger/payment-method", { method: m }).catch(() => {});
+  }
+
+  function loadHistory() {
+    api
+      .get<{ trips: any[] }>("/passenger/trips/history")
+      .then((d) =>
+        setTripHistory(
+          d.trips.map((t) => ({
+            id: t.id,
+            destAddress: t.destAddress,
+            requestedAt: t.requestedAt,
+            status: t.status,
+            fareGrossClp: t.fareGrossClp,
+            paymentMethod: t.paymentMethod,
+            driver: t.driver ? { name: `${t.driver.user.firstName} ${t.driver.user.lastName}`, rating: Number(t.driver.user.ratingAvg) } : null,
+            rating: t.rating ? { score: t.rating.score } : null,
+          }))
+        )
+      )
+      .catch(() => {});
+  }
+
+  function loadScheduledTrips() {
+    api
+      .get<{ trips: typeof scheduledTrips }>("/passenger/trips/scheduled")
+      .then((d) => setScheduledTrips(d.trips))
+      .catch(() => {});
+  }
+
+  async function cancelScheduledTrip(id: string) {
+    try {
+      await api.post(`/passenger/trips/${id}/cancel`);
+      loadScheduledTrips();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   async function getQuote(dest: Landmark) {
     setDestination(dest);
     setError("");
@@ -229,15 +309,36 @@ export function PasajeroApp() {
   async function requestTrip() {
     if (!origin || !destination || !selectedCategory) return;
     const forOther = rideFor === "other" && riderName.trim();
+    const originPayload = {
+      lat: origin.lat,
+      lng: origin.lng,
+      address: forOther ? `${origin.name} · Pasajero: ${riderName.trim()}${riderPhone.trim() ? ` (${riderPhone.trim()})` : ""}` : origin.name,
+    };
+    const destPayload = { lat: destination.lat, lng: destination.lng, address: destination.name };
+
+    if (scheduledFor) {
+      try {
+        await api.post("/passenger/trips/schedule", {
+          origin: originPayload,
+          destination: destPayload,
+          category: selectedCategory.category,
+          paymentMethod: payMethod,
+          scheduledFor: new Date(scheduledFor).toISOString(),
+        });
+        setScheduledFor("");
+        setScreen("home");
+        loadScheduledTrips();
+      } catch (e: any) {
+        setError(e.message);
+      }
+      return;
+    }
+
     setScreen("dispatching");
     try {
       const res = await api.post<{ tripId: string; pin: string }>("/passenger/trips/request", {
-        origin: {
-          lat: origin.lat,
-          lng: origin.lng,
-          address: forOther ? `${origin.name} · Pasajero: ${riderName.trim()}${riderPhone.trim() ? ` (${riderPhone.trim()})` : ""}` : origin.name,
-        },
-        destination: { lat: destination.lat, lng: destination.lng, address: destination.name },
+        origin: originPayload,
+        destination: destPayload,
         category: selectedCategory.category,
         paymentMethod: payMethod,
       });
@@ -318,13 +419,59 @@ export function PasajeroApp() {
           <span className="font-extrabold tracking-tight text-lg">CabrasGo</span>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          {canInstall && (
+            <button onClick={promptInstall} aria-label="Instalar app" title="Instalar app" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
+              📲
+            </button>
+          )}
+          <button onClick={() => setScreen("history")} aria-label="Mis viajes" title="Mis viajes" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
+            🕓
+          </button>
           <button onClick={() => setShowManual(true)} aria-label="Manual de uso" title="Manual de uso" className="w-7 h-7 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-sm">
             📘
           </button>
-          <span className="text-slate-500 font-medium">{user.firstName}</span>
-          <button onClick={logout} className="text-cg-danger font-semibold">
-            Salir
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowUserMenu((v) => !v)}
+              className="w-7 h-7 rounded-full bg-cg-primary text-white flex items-center justify-center text-xs font-bold"
+              aria-label="Mi cuenta"
+            >
+              {user.firstName[0]}
+            </button>
+            {showUserMenu && (
+              <>
+                <div className="fixed inset-0 z-[1999]" onClick={() => setShowUserMenu(false)} />
+                <div className="absolute right-0 top-9 z-[2000] w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-3">
+                  <p className="font-bold text-sm truncate">{user.firstName} {user.lastName}</p>
+                  <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                  <p className="text-xs text-slate-400">★ {Number(user.ratingAvg).toFixed(2)} de calificación</p>
+                  <div className="h-px bg-slate-100 my-2" />
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setScreen("history");
+                    }}
+                    className="w-full text-left text-sm py-1.5 text-slate-600"
+                  >
+                    🕓 Mis viajes
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setShowManual(true);
+                    }}
+                    className="w-full text-left text-sm py-1.5 text-slate-600"
+                  >
+                    📘 Manual de uso
+                  </button>
+                  <div className="h-px bg-slate-100 my-2" />
+                  <button onClick={logout} className="w-full text-left text-sm py-1.5 text-cg-danger font-semibold">
+                    Cerrar sesión
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -334,6 +481,26 @@ export function PasajeroApp() {
         {screen === "home" && (
           <>
             <AdBanner ads={ads} />
+            {scheduledTrips.length > 0 && (
+              <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-4">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold mb-2">Viajes programados</p>
+                <div className="space-y-2">
+                  {scheduledTrips.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between gap-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-bold truncate">{t.destAddress}</p>
+                        <p className="text-xs text-slate-400">
+                          {new Date(t.scheduledFor).toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" })} · {formatClp(t.fareGrossClp)}
+                        </p>
+                      </div>
+                      <button onClick={() => cancelScheduledTrip(t.id)} className="text-cg-danger text-xs font-semibold shrink-0">
+                        Cancelar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <HomeScreen
               origin={origin}
               originLoading={originLoading}
@@ -351,9 +518,14 @@ export function PasajeroApp() {
           </>
         )}
 
+        {screen === "history" && (
+          <HistoryScreen trips={tripHistory} onBack={() => setScreen("home")} />
+        )}
+
         {screen === "categories" && quote && destination && (
           <CategoriesScreen
             quote={quote}
+            origin={origin}
             destination={destination}
             payMethod={payMethod}
             setPayMethod={setPayMethod}
@@ -361,6 +533,8 @@ export function PasajeroApp() {
             onSelect={setSelectedCategory}
             onConfirm={requestTrip}
             onBack={() => setScreen("home")}
+            scheduledFor={scheduledFor}
+            setScheduledFor={setScheduledFor}
           />
         )}
 
@@ -410,8 +584,8 @@ export function PasajeroApp() {
             <p className="text-lg font-extrabold mb-2">Activa tu ubicación para continuar</p>
             <p className="text-sm text-slate-500 mb-5">
               {gpsStatus === "unsupported"
-                ? "Este dispositivo o navegador no puede compartir tu ubicación. Probá desde otro celular o actualizá tu navegador para pedir un viaje."
-                : "CabrasGo necesita tu ubicación para calcular tu punto de partida y encontrar conductores cerca tuyo. Sin GPS activo no podés pedir un viaje."}
+                ? "Este dispositivo o navegador no puede compartir tu ubicación. Prueba desde otro celular o actualiza tu navegador para pedir un viaje."
+                : "CabrasGo necesita tu ubicación para calcular tu punto de partida y encontrar conductores cerca tuyo. Sin GPS activo no puedes pedir un viaje."}
             </p>
             {gpsStatus === "denied" && (
               <button
@@ -422,7 +596,7 @@ export function PasajeroApp() {
               </button>
             )}
             <p className="text-[11px] text-slate-400 mt-3">
-              Si tu navegador ya bloqueó el permiso, tocá el ícono de candado junto a la dirección del sitio, habilitá "Ubicación" y volvé a tocar el botón.
+              Si tu navegador ya bloqueó el permiso, toca el ícono de candado junto a la dirección del sitio, habilita "Ubicación" y vuelve a tocar el botón.
             </p>
           </div>
         </div>
@@ -608,7 +782,7 @@ function HomeScreen({
           </button>
         ))}
         {normalized && results.length === 0 && (
-          <p className="text-sm text-slate-400 px-4 py-6 text-center">Sin resultados para "{search}". Probá con otro sector.</p>
+          <p className="text-sm text-slate-400 px-4 py-6 text-center">Sin resultados para "{search}". Prueba con otro sector.</p>
         )}
       </div>
     </div>
@@ -617,6 +791,7 @@ function HomeScreen({
 
 function CategoriesScreen({
   quote,
+  origin,
   destination,
   payMethod,
   setPayMethod,
@@ -624,8 +799,11 @@ function CategoriesScreen({
   onSelect,
   onConfirm,
   onBack,
+  scheduledFor,
+  setScheduledFor,
 }: {
   quote: Quote;
+  origin: Landmark | null;
   destination: Landmark;
   payMethod: string;
   setPayMethod: (m: any) => void;
@@ -633,13 +811,56 @@ function CategoriesScreen({
   onSelect: (c: QuoteCategory) => void;
   onConfirm: () => void;
   onBack: () => void;
+  scheduledFor: string;
+  setScheduledFor: (v: string) => void;
 }) {
+  const minSchedule = new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16);
+  const [route, setRoute] = useState<[number, number][] | null>(null);
+  const [breakdownFor, setBreakdownFor] = useState<QuoteCategory | null>(null);
+
+  useEffect(() => {
+    setRoute(null);
+    if (!origin) return;
+    let cancelled = false;
+    fetchRoute(origin, destination).then((r) => {
+      if (!cancelled) setRoute(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [origin?.lat, origin?.lng, destination.lat, destination.lng]);
+
   return (
     <div>
       <button onClick={onBack} className="text-sm text-slate-500 mb-3">
         ← Cambiar destino
       </button>
+
+      {origin && (
+        <div className="mb-4 shadow-sm">
+          <LiveMap
+            center={[
+              (origin.lat + destination.lat) / 2,
+              (origin.lng + destination.lng) / 2,
+            ]}
+            markers={[
+              { id: "origin", lat: origin.lat, lng: origin.lng, label: "Origen", sub: origin.name, kind: origin.code === "MI_UBICACION" ? "me" : undefined },
+              { id: "dest", lat: destination.lat, lng: destination.lng, label: "Destino", sub: destination.name },
+            ]}
+            route={route ?? undefined}
+            height={200}
+            zoom={12}
+          />
+        </div>
+      )}
+
       <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-enter">
+        {origin && (
+          <>
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Origen</p>
+            <p className="font-bold text-sm mb-2">{origin.name}</p>
+          </>
+        )}
         <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold mb-0.5">Destino</p>
         <p className="font-bold">{destination.name}</p>
         <p className="text-xs text-slate-400 mt-1">
@@ -665,11 +886,54 @@ function CategoriesScreen({
             <div className="flex-1 min-w-0">
               <p className="font-bold truncate">{CATEGORY_LABEL[c.category]}</p>
               <p className="text-xs text-slate-400">{c.etaMinutes} min de espera {c.recommended ? "· Recomendado" : ""}</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBreakdownFor(c);
+                }}
+                className="text-[11px] font-bold text-cg-primary underline mt-0.5"
+              >
+                Ver desglose
+              </button>
             </div>
             <span className="font-extrabold text-lg tabular-nums shrink-0">{formatClp(c.totalFareClp)}</span>
           </button>
         ))}
       </div>
+
+      {breakdownFor && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[2000] p-0 sm:p-4"
+          onClick={() => setBreakdownFor(null)}
+        >
+          <div
+            className="bg-white w-full sm:max-w-sm sm:rounded-3xl rounded-t-3xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-lg font-extrabold">Desglose de precio</p>
+                <p className="text-xs text-slate-500">{CATEGORY_LABEL[breakdownFor.category]}</p>
+              </div>
+              <button onClick={() => setBreakdownFor(null)} className="w-8 h-8 rounded-full bg-cg-surfaceAlt flex items-center justify-center">✕</button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-slate-500">Bajada de bandera</span><span className="font-semibold">{formatClp(breakdownFor.breakdown.baseFlag)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Tramo pavimentado</span><span className="font-semibold">{formatClp(breakdownFor.breakdown.pavedCost)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Tramo ripio</span><span className="font-semibold">{formatClp(breakdownFor.breakdown.dirtCost)}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Tiempo estimado ({breakdownFor.breakdown.estimatedMinutes} min)</span><span className="font-semibold">{formatClp(breakdownFor.breakdown.timeCost)}</span></div>
+              <div className="flex justify-between border-t border-slate-100 pt-2"><span className="text-slate-500">Subtotal</span><span className="font-semibold">{formatClp(breakdownFor.breakdown.subtotal)}</span></div>
+              {breakdownFor.breakdown.dynamicMultiplier !== 1 && (
+                <div className="flex justify-between"><span className="text-slate-500">Tarifa dinámica</span><span className="font-semibold">x{breakdownFor.breakdown.dynamicMultiplier}</span></div>
+              )}
+              {breakdownFor.breakdown.fuelFactor !== 1 && (
+                <div className="flex justify-between"><span className="text-slate-500">Factor combustible</span><span className="font-semibold">x{breakdownFor.breakdown.fuelFactor}</span></div>
+              )}
+              <div className="flex justify-between border-t border-slate-200 pt-2 text-base"><span className="font-bold">Total</span><span className="font-extrabold">{formatClp(breakdownFor.breakdown.totalFareClp)}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Método de pago</p>
       <div className="grid grid-cols-3 gap-2 mb-6">
@@ -686,12 +950,32 @@ function CategoriesScreen({
         ))}
       </div>
 
+      <div className="mb-5">
+        <label className="flex items-center gap-2 text-sm font-semibold text-slate-600 mb-2">
+          <input
+            type="checkbox"
+            checked={scheduledFor !== ""}
+            onChange={(e) => setScheduledFor(e.target.checked ? minSchedule : "")}
+          />
+          Programar para más tarde
+        </label>
+        {scheduledFor !== "" && (
+          <input
+            type="datetime-local"
+            value={scheduledFor}
+            min={minSchedule}
+            onChange={(e) => setScheduledFor(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm"
+          />
+        )}
+      </div>
+
       <button
         disabled={!selected}
         onClick={onConfirm}
         className="btn-primary"
       >
-        Confirmar viaje
+        {scheduledFor !== "" ? "Programar viaje" : "Confirmar viaje"}
       </button>
     </div>
   );
@@ -858,6 +1142,76 @@ function RatingScreen({
       <button onClick={onSubmit} className="btn-primary">
         Enviar calificación
       </button>
+    </div>
+  );
+}
+
+const STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  COMPLETED: { label: "Completado", className: "bg-emerald-50 text-emerald-700" },
+  CANCELLED: { label: "Cancelado", className: "bg-slate-100 text-slate-500" },
+};
+
+const PAYMENT_LABEL: Record<string, string> = {
+  WEBPAY_ONECLICK: "Webpay",
+  CUENTARUT_BANCOESTADO: "CuentaRUT",
+  CASH: "Efectivo",
+};
+
+function HistoryScreen({
+  trips,
+  onBack,
+}: {
+  trips: {
+    id: string;
+    destAddress: string;
+    requestedAt: string;
+    status: string;
+    fareGrossClp: number;
+    paymentMethod: string;
+    driver: { name: string; rating: number } | null;
+    rating: { score: number } | null;
+  }[];
+  onBack: () => void;
+}) {
+  return (
+    <div>
+      <button onClick={onBack} className="text-sm text-slate-500 mb-3">
+        ← Volver
+      </button>
+      <p className="text-lg font-extrabold mb-4">Mis viajes</p>
+
+      {trips.length === 0 && (
+        <p className="text-sm text-slate-400 text-center py-10">Todavía no tienes viajes registrados.</p>
+      )}
+
+      <div className="space-y-2">
+        {trips.map((t) => {
+          const status = STATUS_LABEL[t.status] ?? { label: t.status, className: "bg-slate-100 text-slate-500" };
+          return (
+            <div key={t.id} className="bg-cg-surface border border-slate-200 rounded-2xl p-4">
+              <div className="flex items-start gap-3">
+                <span className="w-10 h-10 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-lg shrink-0">🚗</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold truncate">{t.destAddress}</p>
+                  <p className="text-xs text-slate-400">
+                    {new Date(t.requestedAt).toLocaleString("es-CL", { dateStyle: "short", timeStyle: "short" })}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-extrabold">{formatClp(t.fareGrossClp)}</p>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${status.className}`}>{status.label}</span>
+                </div>
+              </div>
+              {(t.driver || t.rating) && (
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                  <span>{t.driver ? `${t.driver.name} · ★ ${t.driver.rating.toFixed(1)}` : ""}</span>
+                  <span>{PAYMENT_LABEL[t.paymentMethod] ?? t.paymentMethod}{t.rating ? ` · Tu calificación: ★ ${t.rating.score}` : ""}</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

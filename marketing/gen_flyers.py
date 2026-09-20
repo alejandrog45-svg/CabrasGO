@@ -34,7 +34,7 @@ h1 .accent {{ color: {accent}; }}
   <p class="tagline">{tagline}</p>
   <div class="bottom-card">
     <div class="bottom-text">
-      <div class="label">Escaneá para instalar</div>
+      <div class="label">Escanea para instalar</div>
       <div class="url">cabrasgo.web.app</div>
     </div>
     <div class="qr-box"><img src="{qr}" /></div>
@@ -69,7 +69,7 @@ VARIANTS = [
         text_color="#0F172A", accent="#0F766E",
         ribbon_bg="linear-gradient(90deg,#10B981,#0F766E)", ribbon_shadow="rgba(16,185,129,0.35)",
         tagline_color="#475569", card_bg="#0F172A", card_border="rgba(255,255,255,0.1)",
-        ribbon="5% DE DESCUENTO", headline='Instalá<br/>CabrasGo',
+        ribbon="5% DE DESCUENTO", headline='Instala<br/>CabrasGo',
         tagline="Tu viaje seguro por Las Cabras, Peumo y el Lago Rapel. 5% de descuento al instalar la app.",
         decoration_html='<div class="sunburst"></div>',
         decoration_css=SUNBURST_CSS.format(c1="rgba(16,185,129,0.12)"),
@@ -80,8 +80,8 @@ VARIANTS = [
         bg="#0F172A", text_color="#F8FAFC", accent="#34D399",
         ribbon_bg="linear-gradient(90deg,#10B981,#0F766E)", ribbon_shadow="rgba(16,185,129,0.4)",
         tagline_color="#CBD5E1", card_bg="rgba(255,255,255,0.07)", card_border="rgba(255,255,255,0.14)",
-        ribbon="5% DE DESCUENTO", headline='Instalá<br/>CabrasGo',
-        tagline="Pedí tu viaje en segundos. 5% de descuento al instalar la app.",
+        ribbon="5% DE DESCUENTO", headline='Instala<br/>CabrasGo',
+        tagline="Pide tu viaje en segundos. 5% de descuento al instalar la app.",
         decoration_html=confetti_html(["#10B981", "#34D399", "#0F766E", "#F8FAFC33"], seed=3),
         decoration_css=CONFETTI_CSS,
         qr="../assets/qr/qr-pasajero.png",
@@ -91,7 +91,7 @@ VARIANTS = [
         bg="#F1F5F9", text_color="#0F172A", accent="#0F766E",
         ribbon_bg="linear-gradient(90deg,#10B981,#0F766E)", ribbon_shadow="rgba(16,185,129,0.3)",
         tagline_color="#475569", card_bg="#0F172A", card_border="rgba(255,255,255,0.1)",
-        ribbon="5% DE DESCUENTO", headline='Instalá<br/>CabrasGo',
+        ribbon="5% DE DESCUENTO", headline='Instala<br/>CabrasGo',
         tagline="Movilidad para Las Cabras, Peumo y San Vicente. 5% de descuento al instalar la app.",
         decoration_html='<div class="stripes"></div>',
         decoration_css=STRIPES_CSS.format(c1="rgba(16,185,129,0.08)"),
@@ -103,8 +103,8 @@ VARIANTS = [
         bg="#090D16", text_color="#F8FAFC", accent="#34D399",
         ribbon_bg="#10B981", ribbon_shadow="rgba(16,185,129,0.4)",
         tagline_color="#94A3B8", card_bg="rgba(255,255,255,0.06)", card_border="rgba(255,255,255,0.12)",
-        ribbon="SUMATE COMO CONDUCTOR", headline='Manejá con<br/>CabrasGo',
-        tagline="Generá ingresos con tu propio horario en Las Cabras y alrededores.",
+        ribbon="SÚMATE COMO CONDUCTOR", headline='Maneja con<br/>CabrasGo',
+        tagline="Genera ingresos con tu propio horario en Las Cabras y alrededores.",
         decoration_html='<div class="pinwheel"></div>',
         decoration_css=PINWHEEL_CSS.format(c1="rgba(16,185,129,0.14)"),
         qr="../assets/qr/qr-conductor.png",
@@ -115,8 +115,8 @@ VARIANTS = [
         text_color="#F8FAFC", accent="#34D399",
         ribbon_bg="#10B981", ribbon_shadow="rgba(16,185,129,0.4)",
         tagline_color="#94A3B8", card_bg="rgba(255,255,255,0.06)", card_border="rgba(255,255,255,0.12)",
-        ribbon="SUMATE COMO CONDUCTOR", headline='Manejá con<br/>CabrasGo',
-        tagline="85% de tu tarifa neta para vos. Aceptá viajes desde tu celular.",
+        ribbon="SÚMATE COMO CONDUCTOR", headline='Maneja con<br/>CabrasGo',
+        tagline="85% de tu tarifa neta para ti. Acepta viajes desde tu celular.",
         decoration_html='<div class="sunburst"></div>',
         decoration_css=SUNBURST_CSS.format(c1="rgba(16,185,129,0.10)"),
         qr="../assets/qr/qr-conductor.png",
@@ -126,8 +126,8 @@ VARIANTS = [
         bg="#1E293B", text_color="#F8FAFC", accent="#34D399",
         ribbon_bg="#10B981", ribbon_shadow="rgba(16,185,129,0.4)",
         tagline_color="#CBD5E1", card_bg="rgba(255,255,255,0.07)", card_border="rgba(255,255,255,0.14)",
-        ribbon="SUMATE COMO CONDUCTOR", headline='Manejá con<br/>CabrasGo',
-        tagline="Vehículo propio, tus horarios, tus ganancias. Registrate hoy.",
+        ribbon="SÚMATE COMO CONDUCTOR", headline='Maneja con<br/>CabrasGo',
+        tagline="Vehículo propio, tus horarios, tus ganancias. Regístrate hoy.",
         decoration_html=confetti_html(["#10B981", "#34D399", "#0F766E44", "#F8FAFC22"], seed=11),
         decoration_css=CONFETTI_CSS,
         qr="../assets/qr/qr-conductor.png",

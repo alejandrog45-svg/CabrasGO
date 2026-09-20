@@ -1,6 +1,6 @@
 // Real map tiles via OpenStreetMap (no API key required — unlike Google Maps).
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polygon, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -56,12 +56,14 @@ export function LiveMap({
   center,
   markers = [],
   polygons = [],
+  route,
   height = 220,
   zoom = 13,
 }: {
   center: [number, number];
   markers?: MapMarkerPoint[];
   polygons?: { id: string; positions: [number, number][]; color?: string }[];
+  route?: [number, number][];
   height?: number;
   zoom?: number;
 }) {
@@ -76,6 +78,9 @@ export function LiveMap({
         {polygons.map((p) => (
           <Polygon key={p.id} positions={p.positions} pathOptions={{ color: p.color ?? "#10B981", fillOpacity: 0.15 }} />
         ))}
+        {route && route.length > 1 && (
+          <Polyline positions={route} pathOptions={{ color: "#0F766E", weight: 4, opacity: 0.85 }} />
+        )}
         {markers.map((m) => (
           <Marker
             key={m.id}

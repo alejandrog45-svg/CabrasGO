@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 import { Login } from "./pages/Login";
+import { GuiaQR } from "./pages/GuiaQR";
 import { PasajeroApp } from "./pages/pasajero/PasajeroApp";
 import { ConductorApp } from "./pages/conductor/ConductorApp";
 import { AdminApp } from "./pages/admin/AdminApp";
@@ -12,6 +13,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/guia" element={<GuiaQR />} />
         <Route path="/pasajero/*" element={<PasajeroApp />} />
         <Route path="/conductor/*" element={<ConductorApp />} />
         <Route path="/admin/*" element={<AdminApp />} />

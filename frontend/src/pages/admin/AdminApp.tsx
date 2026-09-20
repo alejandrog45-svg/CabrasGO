@@ -6,6 +6,7 @@ import { LiveMap } from "../../components/LiveMap";
 import { LANDMARKS_CENTER } from "../../lib/landmarks";
 import { ManualModal } from "../../components/ManualModal";
 import { ADMIN_MANUAL } from "../../lib/manuals";
+import { useInstallPrompt } from "../../lib/useInstallPrompt";
 
 interface Kpis {
   gmvTodayClp: number;
@@ -110,6 +111,7 @@ export function AdminApp() {
   const [ads, setAds] = useState<AdCampaign[]>([]);
   const [bonuses, setBonuses] = useState<WeeklyBonusRow[]>([]);
   const [showManual, setShowManual] = useState(false);
+  const { canInstall, promptInstall } = useInstallPrompt();
 
   useEffect(() => {
     if (!user || (user.role !== "ADMIN" && user.role !== "DISPATCHER")) {
@@ -153,6 +155,11 @@ export function AdminApp() {
     refreshAll();
   }
 
+  async function toggleKyc(driverId: string, isKycVerified: boolean) {
+    await api.put(`/admin/drivers/${driverId}/kyc`, { isKycVerified });
+    refreshAll();
+  }
+
   async function createAd(ad: { title: string; bodyText: string; targetAudience: string }) {
     await api.post("/admin/ads", ad);
     refreshAll();
@@ -186,6 +193,16 @@ export function AdminApp() {
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
+          {canInstall && (
+            <button
+              onClick={promptInstall}
+              aria-label="Instalar app"
+              title="Instalar app"
+              className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-sm"
+            >
+              📲
+            </button>
+          )}
           <button
             onClick={() => setShowManual(true)}
             aria-label="Manual de uso"
@@ -223,7 +240,7 @@ export function AdminApp() {
 
       <main className="p-6 max-w-6xl mx-auto">
         {tab === "kpis" && kpis && <KpiTab kpis={kpis} />}
-        {tab === "flota" && <FleetTab drivers={drivers} onToggleVip={toggleVip} />}
+        {tab === "flota" && <FleetTab drivers={drivers} onToggleVip={toggleVip} onToggleKyc={toggleKyc} />}
         {tab === "geocercas" && <GeofenceTab zones={zones} onUpdate={updateZone} />}
         {tab === "combustible" && <FuelTab fuel={fuel} onSync={syncFuel} />}
         {tab === "usuarios" && <UsersTab users={users} />}
@@ -291,8 +308,10 @@ function KpiTab({ kpis }: { kpis: Kpis }) {
 function FleetTab({
   drivers,
   onToggleVip,
+  onToggleKyc,
 }: {
   drivers: RadarDriver[];
+  onToggleKyc: (driverId: string, isKycVerified: boolean) => void;
   onToggleVip: (driverId: string, isVip: boolean) => void;
 }) {
   return (
@@ -344,7 +363,16 @@ function FleetTab({
               <td className="px-4 py-3 text-xs text-slate-500">{d.lat && d.lng ? `${d.lat.toFixed(4)}, ${d.lng.toFixed(4)}` : "—"}</td>
               <td className="px-4 py-3">{Math.round(d.speedKmh)} km/h</td>
               <td className="px-4 py-3">{d.batteryPct}%</td>
-              <td className="px-4 py-3">{d.isKycVerified ? "✅" : "⏳"}</td>
+              <td className="px-4 py-3">
+                <button
+                  onClick={() => onToggleKyc(d.id, !d.isKycVerified)}
+                  className={`text-xs font-semibold rounded-full px-3 py-1 ${
+                    d.isKycVerified ? "bg-emerald-50 text-cg-earnings" : "bg-amber-50 text-amber-700"
+                  }`}
+                >
+                  {d.isKycVerified ? "✅ Verificado" : "⏳ Aprobar"}
+                </button>
+              </td>
               <td className="px-4 py-3">
                 <button
                   onClick={() => onToggleVip(d.id, !d.isVip)}

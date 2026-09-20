@@ -45,15 +45,15 @@ passengerRouter.post("/quote", async (req, res) => {
   res.json(quote);
 });
 
-passengerRouter.post("/trips/request", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
-  const passengerId = req.auth!.userId;
-  const { origin, destination, category, paymentMethod } = req.body as {
-    origin: { lat: number; lng: number; address: string };
-    destination: { lat: number; lng: number; address: string };
-    category: "STANDARD_SEDAN" | "RURAL_4X4_XL";
-    paymentMethod: "WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH";
-  };
-
+// Compartido por /trips/request (inmediato) y /trips/schedule (programado):
+// arma todos los campos derivados de la tarifa antes de crear el Trip.
+async function buildTripData(
+  passengerId: string,
+  origin: { lat: number; lng: number; address?: string },
+  destination: { lat: number; lng: number; address?: string },
+  category: "STANDARD_SEDAN" | "RURAL_4X4_XL",
+  paymentMethod: "WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH"
+) {
   const distanceKmTotal = haversineKm(origin, destination);
   const zone = (await resolveGeofence(destination)) ?? (await resolveGeofence(origin));
   const ruralZones = ["LLALLAUQUEN", "EL_MANZANO", "MARINA_GOLF_RAPEL"];
@@ -73,39 +73,110 @@ passengerRouter.post("/trips/request", requireAuth("PASSENGER"), async (req: Aut
   const fareGrossClp = Math.round(fare.totalFareClp * catMultiplier);
   const driverNetPct = await driverNetPctFromConfig();
   const { driverNetClp, platformFeeClp } = splitFare(fareGrossClp, driverNetPct);
-
   const pin = String(Math.floor(1000 + Math.random() * 9000));
 
-  const trip = await prisma.trip.create({
-    data: {
-      passengerId,
-      status: "DISPATCHING",
-      category,
-      pinVerification: pin,
-      originAddress: origin.address ?? "Origen",
-      originLat: origin.lat,
-      originLng: origin.lng,
-      destAddress: destination.address ?? "Destino",
-      destLat: destination.lat,
-      destLng: destination.lng,
-      distanceKmTotal,
-      distanceKmPaved,
-      distanceKmDirt,
-      geofenceZoneCode: zone?.code ?? null,
-      dynamicMultiplier,
-      fuelFactor: fare.fuelFactor,
-      fareGrossClp,
-      driverNetClp,
-      platformFeeClp,
-      paymentMethod: paymentMethod ?? "WEBPAY_ONECLICK",
-      paymentStatus: "PENDING",
-    },
-  });
+  return {
+    passengerId,
+    category,
+    pinVerification: pin,
+    originAddress: origin.address ?? "Origen",
+    originLat: origin.lat,
+    originLng: origin.lng,
+    destAddress: destination.address ?? "Destino",
+    destLat: destination.lat,
+    destLng: destination.lng,
+    distanceKmTotal,
+    distanceKmPaved,
+    distanceKmDirt,
+    geofenceZoneCode: zone?.code ?? null,
+    dynamicMultiplier,
+    fuelFactor: fare.fuelFactor,
+    fareGrossClp,
+    driverNetClp,
+    platformFeeClp,
+    paymentMethod: paymentMethod ?? "WEBPAY_ONECLICK",
+    paymentStatus: "PENDING" as const,
+  };
+}
+
+passengerRouter.post("/trips/request", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const passengerId = req.auth!.userId;
+  const { origin, destination, category, paymentMethod } = req.body as {
+    origin: { lat: number; lng: number; address: string };
+    destination: { lat: number; lng: number; address: string };
+    category: "STANDARD_SEDAN" | "RURAL_4X4_XL";
+    paymentMethod: "WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH";
+  };
+
+  const tripData = await buildTripData(passengerId, origin, destination, category, paymentMethod);
+  const trip = await prisma.trip.create({ data: { ...tripData, status: "DISPATCHING" } });
 
   dispatchTrip(trip.id).catch((e) => console.error("dispatch error", e));
 
-  res.json({ tripId: trip.id, status: trip.status, pin: trip.pinVerification, fareGrossClp, driverNetClp });
+  res.json({
+    tripId: trip.id,
+    status: trip.status,
+    pin: trip.pinVerification,
+    fareGrossClp: trip.fareGrossClp,
+    driverNetClp: trip.driverNetClp,
+  });
 });
+
+passengerRouter.post("/trips/schedule", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const passengerId = req.auth!.userId;
+  const { origin, destination, category, paymentMethod, scheduledFor } = req.body as {
+    origin: { lat: number; lng: number; address: string };
+    destination: { lat: number; lng: number; address: string };
+    category: "STANDARD_SEDAN" | "RURAL_4X4_XL";
+    paymentMethod: "WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH";
+    scheduledFor: string;
+  };
+
+  const when = new Date(scheduledFor);
+  if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now() + 5 * 60 * 1000) {
+    return res.status(400).json({ error: "scheduledFor debe ser al menos 5 minutos en el futuro" });
+  }
+
+  const tripData = await buildTripData(passengerId, origin, destination, category, paymentMethod);
+  const trip = await prisma.trip.create({ data: { ...tripData, status: "SCHEDULED", scheduledFor: when } });
+
+  res.json({ tripId: trip.id, status: trip.status, scheduledFor: trip.scheduledFor, fareGrossClp: trip.fareGrossClp });
+});
+
+passengerRouter.get("/trips/scheduled", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const trips = await prisma.trip.findMany({
+    where: { passengerId: req.auth!.userId, status: "SCHEDULED" },
+    orderBy: { scheduledFor: "asc" },
+  });
+  res.json({ trips });
+});
+
+passengerRouter.get("/payment-method", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+  res.json({ preferredPaymentMethod: user?.preferredPaymentMethod ?? "WEBPAY_ONECLICK" });
+});
+
+passengerRouter.put("/payment-method", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const { method } = req.body as { method: "WEBPAY_ONECLICK" | "CUENTARUT_BANCOESTADO" | "CASH" };
+  if (!["WEBPAY_ONECLICK", "CUENTARUT_BANCOESTADO", "CASH"].includes(method)) {
+    return res.status(400).json({ error: "Método de pago inválido" });
+  }
+  await prisma.user.update({ where: { id: req.auth!.userId }, data: { preferredPaymentMethod: method } });
+  res.json({ preferredPaymentMethod: method });
+});
+
+// Revisa cada 30s si hay viajes programados que ya llegaron a su hora, y los
+// pasa a DISPATCHING para que entren al mismo flujo de búsqueda de conductor
+// que un viaje pedido en el momento (ver dispatchTrip más abajo).
+export async function dispatchDueScheduledTrips() {
+  const due = await prisma.trip.findMany({
+    where: { status: "SCHEDULED", scheduledFor: { lte: new Date() } },
+  });
+  for (const trip of due) {
+    await prisma.trip.update({ where: { id: trip.id }, data: { status: "DISPATCHING" } });
+    dispatchTrip(trip.id).catch((e) => console.error("dispatch error (scheduled)", e));
+  }
+}
 
 // ---- 15s dispatch cascade: offer to nearest available driver, requeue on timeout ----
 async function dispatchTrip(tripId: string) {
