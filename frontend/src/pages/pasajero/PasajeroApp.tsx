@@ -1000,6 +1000,25 @@ function TrackingScreen({
     IN_PROGRESS: "Viaje en curso",
     COMPLETED: "Viaje completado",
   };
+  const [ratings, setRatings] = useState<{ id: string; score: number; feedbackTags: string[]; fromFirstName: string; createdAt: string }[] | null>(null);
+  const [loadingRatings, setLoadingRatings] = useState(false);
+
+  async function toggleRatings() {
+    if (ratings !== null) {
+      setRatings(null);
+      return;
+    }
+    setLoadingRatings(true);
+    try {
+      const d = await api.get<{ ratings: typeof ratings }>(`/passenger/drivers/${live.driver.id}/ratings`);
+      setRatings(d.ratings ?? []);
+    } catch {
+      setRatings([]);
+    } finally {
+      setLoadingRatings(false);
+    }
+  }
+
   return (
     <div>
       <div className="bg-cg-primary text-white rounded-2xl p-4 mb-4">
@@ -1021,19 +1040,49 @@ function TrackingScreen({
       </div>
 
       {live.driver && (
-        <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="w-11 h-11 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-lg shrink-0">🚗</span>
-            <div className="min-w-0">
-              <p className="font-bold truncate">{live.driver.name}</p>
-              <p className="text-xs text-slate-400 truncate">{live.driver.model} · {formatPatente(live.driver.plate)}</p>
-              <p className="text-xs text-slate-400">⭐ {Number(live.driver.rating).toFixed(1)}</p>
+        <div className="bg-cg-surface border border-slate-200 rounded-2xl p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-11 h-11 rounded-full bg-cg-surfaceAlt flex items-center justify-center text-lg shrink-0">🚗</span>
+              <div className="min-w-0">
+                <p className="font-bold truncate">{live.driver.name}</p>
+                <p className="text-xs text-slate-400 truncate">{live.driver.model} · {formatPatente(live.driver.plate)}</p>
+                <button onClick={toggleRatings} className="text-xs text-cg-accent font-semibold">
+                  ⭐ {Number(live.driver.rating).toFixed(1)} · ver calificaciones
+                </button>
+              </div>
+            </div>
+            <div className="text-right shrink-0 pl-3">
+              <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">PIN</p>
+              <p className="text-2xl font-extrabold tracking-widest tabular-nums">{pin}</p>
             </div>
           </div>
-          <div className="text-right shrink-0 pl-3">
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">PIN</p>
-            <p className="text-2xl font-extrabold tracking-widest tabular-nums">{pin}</p>
-          </div>
+
+          {live.driver.phone && (
+            <a
+              href={`tel:${live.driver.phone}`}
+              className="mt-3 flex items-center justify-center gap-2 w-full bg-cg-surfaceAlt rounded-xl py-2.5 text-sm font-bold text-cg-primary"
+            >
+              📞 Llamar al conductor
+            </a>
+          )}
+
+          {loadingRatings && <p className="text-xs text-slate-400 mt-3">Cargando calificaciones...</p>}
+          {ratings !== null && !loadingRatings && (
+            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+              {ratings.length === 0 && <p className="text-xs text-slate-400">Todavía no tiene calificaciones de otros pasajeros.</p>}
+              {ratings.map((r) => (
+                <div key={r.id} className="text-sm">
+                  <p className="font-semibold">
+                    {"⭐".repeat(r.score)} <span className="text-slate-400 font-normal">— {r.fromFirstName}</span>
+                  </p>
+                  {r.feedbackTags.length > 0 && (
+                    <p className="text-xs text-slate-500">{r.feedbackTags.join(" · ")}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

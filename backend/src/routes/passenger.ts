@@ -243,6 +243,31 @@ async function dispatchTrip(tripId: string) {
   }, 15000);
 }
 
+// Calificaciones que otros pasajeros dejaron sobre este conductor — solo el
+// puntaje, los tags predefinidos ("Puntual", "Buen trato", etc.) y el nombre
+// de pila de quien calificó; no hay texto libre en el modelo de Rating.
+passengerRouter.get("/drivers/:driverId/ratings", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
+  const driver = await prisma.driver.findUnique({ where: { id: req.params.driverId } });
+  if (!driver) return res.status(404).json({ error: "Conductor no encontrado" });
+
+  const ratings = await prisma.rating.findMany({
+    where: { toUserId: driver.userId },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    include: { fromUser: { select: { firstName: true } } },
+  });
+
+  res.json({
+    ratings: ratings.map((r) => ({
+      id: r.id,
+      score: r.score,
+      feedbackTags: JSON.parse(r.feedbackTagsJson) as string[],
+      fromFirstName: r.fromUser.firstName,
+      createdAt: r.createdAt,
+    })),
+  });
+});
+
 passengerRouter.get("/trips/:id/live", requireAuth("PASSENGER"), async (req: AuthedRequest, res) => {
   const trip = await prisma.trip.findUnique({
     where: { id: req.params.id },
