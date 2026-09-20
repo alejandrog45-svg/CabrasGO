@@ -310,3 +310,111 @@ activarse de inmediato al aceptar).
   (expira 2026-09-22). **Todavía sin probar en celular real ni commiteado**
   — falta confirmación del dueño antes de mergear a `alejandro main` y
   deployar a producción.
+  (Nota sesión 2026-09-19 noche: esto ya se mergeó y deployó — ver commit
+  `d1812f9` y la sección siguiente. El punto de "instalar app" que quedaba
+  pendiente de decisión se resolvió abajo.)
+
+## Sesión 2026-09-19 noche — instalar app, QR, tarifas, historial, registro real
+
+Se avanzó 1 a 1 sobre los 4 pendientes de la sesión anterior, más varios
+bugs encontrados en el camino. Todo verificado con `tsc -b`/`vite
+build`/`npm run build` sin errores antes de cada deploy a preview.
+
+- **Botón "instalar app"**: dueño decidió construir uno propio.
+  `frontend/src/lib/useInstallPrompt.ts` (hook que escucha
+  `beforeinstallprompt`) + botón 📲 en las 3 apps, junto al 📘 de manual.
+  Solo aparece en navegadores que soportan el evento (Android
+  Chrome/Edge; no existe en iOS Safari, ahí no cambia nada).
+- **QR + guía paso a paso**: nueva página pública `/guia`
+  (`frontend/src/pages/GuiaQR.tsx`), sin login, reusa textualmente
+  `PASAJERO_MANUAL` (no se inventó contenido nuevo). QR generado con
+  `qrcode` (Python) en `marketing/output/qr/qr-guia-cabrasgo.png`, apunta a
+  `cabrasgo.web.app/guia` (URL real de producción, no al preview).
+- **Programar viaje para más tarde + método de pago preferido**: requirió
+  schema nuevo — `Trip.scheduledFor` (`DateTime?`), status `SCHEDULED`, y
+  `User.preferredPaymentMethod`. Backend: `POST /passenger/trips/schedule`,
+  `GET /passenger/trips/scheduled`, `GET`/`PUT /passenger/payment-method`,
+  y `dispatchDueScheduledTrips()` en `src/routes/passenger.ts` corrida cada
+  30s desde `src/index.ts` (pasa `SCHEDULED` → `DISPATCHING` cuando llega la
+  hora, reusa el mismo `dispatchTrip` de siempre). Frontend: toggle
+  "Programar para más tarde" en `CategoriesScreen`, lista "Viajes
+  programados" en home de pasajero con botón cancelar.
+  **Pendiente real**: correr `npx prisma db push` contra la base de
+  Railway de producción para crear las columnas nuevas — no se hizo en
+  esta sesión, requiere aprobación explícita antes de tocar la DB de
+  producción.
+- **Ruta real en el mapa (estilo Uber)**: `frontend/src/lib/routing.ts`
+  llama a OSRM público (`router.project-osrm.org`, gratis, sin API key,
+  mismo espíritu que Leaflet+OSM) y dibuja el `Polyline` real en
+  `CategoriesScreen`. `LiveMap.tsx` ahora acepta prop `route`.
+- **Desglose de tarifa**: modal "Ver desglose" en cada categoría de
+  `CategoriesScreen`, con los valores reales que ya calculaba
+  `backend/src/lib/fare.ts` (bajada de bandera, tramo pavimentado/ripio,
+  tiempo, tarifa dinámica, factor combustible) — antes se calculaban pero
+  no se mostraban al pasajero.
+- **Historial de viajes + menú de usuario**: pantalla `HistoryScreen` en
+  pasajero (ícono 🕓 en el header), consume `GET
+  /passenger/trips/history` que ya existía. Menú de usuario (avatar con
+  inicial) reemplaza el simple "Salir": muestra nombre, email, rating real,
+  accesos a Mis viajes / Manual, y Cerrar sesión.
+- **Registro real de usuarios** (antes bloqueado por decisión de negocio
+  pendiente — el dueño confirmó explícitamente en esta sesión que procede):
+  - `POST /auth/register` (pasajero): RUT validado con `isValidRut`
+    (`src/lib/chile.ts`), password mín. 8 caracteres, chequea email/RUT
+    duplicado. Pantalla "Crear cuenta nueva" en `Login.tsx`.
+  - `POST /auth/register-driver` (conductor, KYC): pide licencia,
+    vencimiento licencia/SOAP/revisión técnica, patente, modelo, categoría,
+    RUT de cuenta bancaria. Crea `Driver.isKycVerified = false` — un admin
+    debe aprobarlo. Pantalla "Súmate como conductor" en `Login.tsx`.
+  - Admin: botón real "⏳ Aprobar" / "✅ Verificado" en Radar de Flotas
+    (antes esa columna era solo texto de solo lectura) — llama al endpoint
+    `PUT /admin/drivers/:id/kyc` que ya existía en el backend pero no tenía
+    UI conectada.
+  - **Explícitamente fuera de alcance** (necesitan credenciales que no
+    existen en el proyecto — no se simularon botones falsos): login con
+    Google/Apple (requiere client ID/secret OAuth) y verificación por SMS
+    (requiere cuenta Twilio u otro proveedor).
+
+### Bugs reales encontrados y corregidos (no eran parte del pedido original)
+
+- **Coordenada de "Marina Golf Rapel" mal calculada**: en
+  `backend/src/lib/landmarks.ts` estaba a ~10 km de su ubicación real,
+  inflando tarifas hasta 8x para viajes cortos reales (~500m). Corregida
+  contra datos reales de OpenStreetMap/Nominatim (lat -34.1586649, lng
+  -71.4567144, antes -34.2486/-71.4312). El resto de landmarks se
+  verificó por muestreo (Plaza de Armas coincide casi exacto; Llallauquén
+  tiene un desvío de ~5km que NO se tocó — queda para revisar si hace
+  falta).
+- **Pantalla de categorías no mostraba el origen**, solo destino — se
+  agregó la dirección de origen a la tarjeta y al mapa.
+- **Idioma**: se encontró voseo rioplatense ("vos", "pedí", "tenés",
+  "instalá", "manejá", "sumate", "registrate", "escaneá", "deslizá") en
+  manuales in-app y en los 8 flyers de marketing — corregido a tuteo
+  chileno estándar en todo el proyecto (`frontend/src/lib/manuals.ts`,
+  textos de GPS en las 3 apps, `marketing/gen_flyers.py` y los templates de
+  post/story de lanzamiento).
+
+### Bug de infraestructura encontrado, NO corregido (requiere decisión)
+
+`backend/prisma/schema.prisma` tiene `provider = "postgresql"` (desde el
+commit `25dde10`, "switch to persistent Postgres") pero `backend/.env` y
+`.env.example` siguen con `DATABASE_URL="file:./dev.db"` (SQLite) y el
+`README.md` documenta el flujo local como si fuera SQLite. Esto significa
+que **el dev local está roto tal como está commiteado** — cualquiera que
+siga el README (`npm run setup && npm run dev`) va a fallar con "the URL
+must start with the protocol postgresql://". Para probar las 3 apps en
+esta sesión se cambió `schema.prisma` a `sqlite` temporalmente, se generó
+Prisma Client, se hizo `db push` + `seed` contra `dev.db`, se probó, y se
+revirtió a `postgresql` antes de cerrar — nada de esto quedó commiteado.
+**Pendiente real**: decidir si el dev local vuelve a SQLite (actualizar
+README si no) o si se documenta cómo levantar un Postgres local (Docker no
+está disponible en este equipo).
+
+### Verificación pendiente del dueño antes del próximo deploy a producción
+
+Todo lo de esta sesión está en un canal preview de Firebase (no toca
+`cabrasgo.web.app`): **`https://cabrasgo--preview-install-btn-4twwvd7c.web.app`**
+(expira 2026-09-22). El registro real (`/auth/register` y
+`/auth/register-driver`) SÍ pega contra el backend de Railway en
+producción (el preview solo cambia el frontend) — probarlo ahí crea
+usuarios reales en la base de producción.
