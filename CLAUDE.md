@@ -425,3 +425,72 @@ Todo lo de esta sesión está en un canal preview de Firebase (no toca
 `/auth/register-driver`) SÍ pega contra el backend de Railway en
 producción (el preview solo cambia el frontend) — probarlo ahí crea
 usuarios reales en la base de producción.
+
+## Login con Google + Teléfono/SMS vía Firebase Auth — solo pasajero (2026-09-20)
+
+Decisión de negocio confirmada por el dueño antes de implementar: el RUT
+queda **opcional** al registrarse por Google/teléfono (se pide después solo
+si el usuario paga con CuentaRUT BancoEstado), y esto aplica **solo al
+pasajero** — el conductor sigue exclusivamente por `/auth/register-driver`
+con KYC completo (licencia, patente, revisión técnica, etc.), sin atajo de
+login social.
+
+- **Prisma**: `User.rut`, `User.email`, `User.passwordHash` pasaron de
+  obligatorios a `String?` opcionales; se agregó `User.firebaseUid String?
+  @unique`. Aplicado a la Postgres de producción vía `npx prisma db push`
+  contra el túnel SSH (`herramientas/tunel-postgres-railway.bat`) — cambio
+  aditivo, sin pérdida de datos (las filas existentes quedan con
+  `firebaseUid = NULL`, permitido en una columna única de Postgres).
+- **Backend**: `backend/src/lib/firebaseAdmin.ts` inicializa
+  `firebase-admin` v14 (API modular: `initializeApp`/`cert` de
+  `firebase-admin/app`, `getAuth` de `firebase-admin/auth`) leyendo el JSON
+  completo del service account desde `FIREBASE_SERVICE_ACCOUNT` (una sola
+  línea en `.env` local y en las variables de Railway — mismo patrón que el
+  bot de WhatsApp de Ferretería Oviedo). Nuevo `POST /auth/firebase`
+  (`backend/src/routes/auth.ts`) con la lógica de 3 riesgos reales
+  detectados en revisión (ver más abajo):
+  1. Busca por `firebaseUid` → si no, por email **solo si
+     `email_verified === true`** (nunca por email sin verificar — evita que
+     alguien reclame la cuenta de otra persona registrando su email en
+     Firebase) → si no, por teléfono.
+  2. Si la cuenta encontrada es `role: DRIVER`, responde 403 explícito — un
+     conductor no puede colarse como pasajero por Google/SMS con su mismo
+     email o teléfono.
+  3. El `create()` de usuario nuevo está en `try/catch` capturando
+     `Prisma.PrismaClientKnownRequestError` código `P2002`, para el caso de
+     doble clic/doble submit disparando dos requests concurrentes con el
+     mismo `firebaseUid`.
+- **Frontend**: `frontend/src/lib/firebase.ts` (config pública del SDK web,
+  no es secreta) y `frontend/src/lib/phone.ts`
+  (`normalizeChileanPhoneToE164`). En `Login.tsx`: botón "Continuar con
+  Google" (`signInWithPopup`, con fallback automático a
+  `signInWithRedirect` si el popup es bloqueado — pasa en Safari iOS y en
+  los navegadores integrados de Instagram/WhatsApp) y flujo de teléfono con
+  `RecaptchaVerifier` invisible + `signInWithPhoneNumber`.
+- **Revisión con Gemini** (`scripts/consultar-gemini.js`, ver sección de
+  comandos): se le pidió revisar primero el plan y después el código ya
+  escrito, dos pasadas separadas. Encontró 6 problemas en el plan (email
+  nullable, colisión de cuentas por email, fuga de roles, `signInWithPopup`
+  roto en Safari/webviews, `RecaptchaVerifier` + React StrictMode,
+  normalización E.164) y 3 más ya en el código escrito (vinculación
+  insegura por email no verificado, bypass del bloqueo de conductor vía
+  login por teléfono, condición de carrera en el `create`) — todos
+  corregidos antes de tocar producción.
+- **Consola de Firebase** (hecho por el dueño, no por Claude Code):
+  proveedores Google y Teléfono habilitados en Authentication, con Chile
+  agregado a la política de región de SMS (por defecto Firebase bloquea
+  SMS a países no autorizados, error `auth/operation-not-allowed`). Un
+  número de teléfono de prueba quedó registrado en la consola (nunca
+  manda SMS real, acepta un código fijo) para probar el flujo sin gastar
+  la cuota gratis de 10 SMS/día.
+- **Verificado en vivo en `cabrasgo.web.app`**: login con Google (cuenta
+  real, vinculó correctamente a una cuenta pasajero ya existente por email
+  verificado) y login por SMS con el número de prueba — ambos aterrizan en
+  `/pasajero` con GPS real. Bug de despliegue encontrado y resuelto en el
+  camino: el Service Worker de la PWA cacheaba la build anterior en el
+  navegador normal (invisible en incógnito) — se resolvió desregistrando
+  el service worker y limpiando caches manualmente tras el deploy.
+- **Fuera de alcance de esta sesión**: **Apple Sign-In** — requiere cuenta
+  Apple Developer de pago (US$99/año), decisión y trámite del dueño. Solo
+  es obligatorio si se publica una app nativa en el App Store; la PWA web
+  puede seguir sin él indefinidamente.
