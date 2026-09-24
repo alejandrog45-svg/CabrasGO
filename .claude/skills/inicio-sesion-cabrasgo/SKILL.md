@@ -32,9 +32,16 @@ por defecto:
 
 ```bash
 git remote -v                          # correr desde la raíz del repo, sea cual sea el sistema/dispositivo
-gh auth status 2>&1 | head -5          # si gh está disponible
+"W:\PROYECTOS CUENTA ALEJANDROG45\herramientas-portables\gh.cmd" auth status 2>&1 | head -5
 firebase projects:list 2>&1 | head -5  # si firebase CLI está disponible
 ```
+
+`gh.cmd` es un wrapper que fija `GH_CONFIG_DIR` al config aislado de esta
+cuenta (`herramientas-portables\gh-config`) antes de invocar el `gh.exe`
+portátil — usarlo siempre en vez de un `gh` suelto del PATH del sistema
+(no existe) o de invocar `gh.exe` directo, que heredaría el
+`GH_CONFIG_DIR=E:\config\gh` de Ferretería Oviedo si esa variable sigue
+activa en el entorno de la sesión (solo en PC — no aplica en celular/cloud).
 
 Si `gh auth status` o `firebase` muestran una cuenta que no es
 `alejandrog45@gmail.com`, **PARAR y avisar al usuario** — no intentar
