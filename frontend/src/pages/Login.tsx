@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
+  FacebookAuthProvider,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   signInWithPopup,
@@ -106,6 +107,14 @@ function IconBank() {
   );
 }
 
+function IconFacebook() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-5 h-5">
+      <path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.89v2.25h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07Z" />
+    </svg>
+  );
+}
+
 function IconGoogle() {
   return (
     <svg viewBox="0 0 24 24" className="w-5 h-5">
@@ -164,6 +173,7 @@ export function Login() {
   const [bankAccountRut, setBankAccountRut] = useState("");
 
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [facebookLoading, setFacebookLoading] = useState(false);
   const [phoneMode, setPhoneMode] = useState<"closed" | "input" | "code">("closed");
   const [phoneInput, setPhoneInput] = useState("");
   const [otpCode, setOtpCode] = useState("");
@@ -227,6 +237,31 @@ export function Login() {
       setError(e.message || "No se pudo iniciar sesión con Google");
     } finally {
       setGoogleLoading(false);
+    }
+  }
+
+  async function handleFacebookLogin() {
+    setFacebookLoading(true);
+    setError("");
+    const provider = new FacebookAuthProvider();
+    provider.addScope("email");
+    try {
+      const result = await signInWithPopup(firebaseAuth, provider);
+      const idToken = await result.user.getIdToken();
+      await finishFirebaseLogin(idToken);
+    } catch (e: any) {
+      const blockedCodes = ["auth/popup-blocked", "auth/popup-closed-by-user", "auth/cancelled-popup-request"];
+      if (blockedCodes.includes(e.code)) {
+        await signInWithRedirect(firebaseAuth, provider);
+        return;
+      }
+      if (e.code === "auth/account-exists-with-different-credential") {
+        setError("Ese email ya tiene una cuenta con otro método de acceso (Google o contraseña). Usa ese método.");
+        return;
+      }
+      setError(e.message || "No se pudo iniciar sesión con Facebook");
+    } finally {
+      setFacebookLoading(false);
     }
   }
 
@@ -620,6 +655,16 @@ export function Login() {
         >
           <IconGoogle />
           {googleLoading ? "Conectando..." : "Continuar con Google"}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleFacebookLogin}
+          disabled={facebookLoading}
+          className="w-full h-[52px] mt-2.5 flex items-center justify-center gap-2.5 bg-white border border-slate-200 hover:border-slate-300 rounded-xl font-semibold text-slate-700 text-sm shadow-[0_1px_2px_rgba(15,23,42,0.04)] disabled:opacity-60"
+        >
+          <IconFacebook />
+          {facebookLoading ? "Conectando..." : "Continuar con Facebook"}
         </button>
 
         {phoneMode === "closed" && (
