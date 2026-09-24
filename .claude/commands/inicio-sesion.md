@@ -15,8 +15,7 @@ firebase projects:list 2>&1 | head -5
 ```
 
 Confirmar:
-- `alejandro` → `alejandrog45-svg/CabrasGO` (único remoto para push)
-- `origin` → `oviedoem/CabrasGO` (solo lectura, nunca push)
+- `origin` → `alejandrog45-svg/CabrasGO` (único remoto, es el remoto de deploy — push directo acá)
 - La cuenta activa de `gh`/`firebase` es `alejandrog45@gmail.com`
 
 Si algo no coincide, **detenerse y avisar** antes de tocar git o deploy —
@@ -24,7 +23,7 @@ no asumir ni cambiar de cuenta por cuenta propia.
 
 ### 2. Estado del proyecto
 
-- Si existe `E:\CabrasGO-deploy\flujo-proyecto-cabrasgo.html` (solo en PC),
+- Si existe `W:\CabrasGO\flujo-proyecto-cabrasgo.html` (solo en PC),
   leerlo — fuente de verdad de sesión a sesión: cuentas, URLs, línea de
   tiempo, pendientes/bloqueados. Si no existe (celular/cloud), usar
   `CLAUDE.md` de la raíz del repo como fuente de verdad.
@@ -48,4 +47,4 @@ no asumir ni cambiar de cuenta por cuenta propia.
   `firebase deploy`.
 - El deploy a Firebase pide aprobación (clasificador de permisos) — esperado,
   no reintentar a ciegas si el usuario está lejos del PC.
-- Nunca push a `origin` (oviedoem/CabrasGO), siempre a `alejandro main`.
+- Push siempre a `origin main` (único remoto, `alejandrog45-svg/CabrasGO`).

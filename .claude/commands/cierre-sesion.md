@@ -13,8 +13,8 @@ git status --short
 netstat -ano | grep -E ":5173|:8080"   # solo aplica en PC
 ```
 
-- `git status` debe quedar limpio. Si no, commitear y pushear a `alejandro main`
-  (nunca a `origin`) antes de cerrar.
+- `git status` debe quedar limpio. Si no, commitear y pushear a `origin main`
+  (único remoto) antes de cerrar.
 - Si algún puerto de dev quedó escuchando (PC), matar el proceso por PID.
 
 ### 2. Documentación (solo si se desplegó algo nuevo en esta sesión)
@@ -23,7 +23,7 @@ netstat -ano | grep -E ":5173|:8080"   # solo aplica en PC
   algoritmo de tarifa, endpoints o comportamiento de negocio — commitear
   junto con el código.
 - Si la sesión corre en el PC, actualizar también
-  **`E:\CabrasGO-deploy\flujo-proyecto-cabrasgo.html`** con un nuevo paso en
+  **`W:\CabrasGO\flujo-proyecto-cabrasgo.html`** con un nuevo paso en
   la línea de tiempo (qué se hizo, verificación, estado) — se queda local,
   no va a git.
 

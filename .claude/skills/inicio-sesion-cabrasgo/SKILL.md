@@ -1,28 +1,27 @@
 ---
 name: inicio-sesion-cabrasgo
-description: Protocolo de inicio y cierre de sesión para el proyecto CabrasGo (movilidad Las Cabras/Peumo/Lago Rapel) — separa sus cuentas (GitHub alejandrog45-svg, Firebase/Railway alejandrog45@gmail.com) de las del ecosistema Ferretería Oviedo para no mezclar proyectos, y aplica ahorro de tokens de principio a fin. Activar SIEMPRE al abrir o cerrar cualquier sesión de Claude Code en este repo, sea en PC, celular o cloud.
+description: Protocolo de inicio y cierre de sesión para el proyecto CabrasGo (movilidad Las Cabras/Peumo/Lago Rapel), cuenta personal alejandrog45@gmail.com (GitHub alejandrog45-svg, Firebase/Railway) — evita mezclar credenciales/rutas con cualquier otro proyecto, y aplica ahorro de tokens de principio a fin. Activar SIEMPRE al abrir o cerrar cualquier sesión de Claude Code en este repo, sea en PC, celular o cloud.
 ---
 
 # Inicio de sesión — CabrasGo
 
-Este proyecto (repo `CabrasGO`, deploy local en `E:\CabrasGO-deploy\CabrasGO`
-cuando corre en el PC) es un ecosistema de cuentas
-**completamente separado** de Ferretería Oviedo El Manzano. Esta skill existe
-para que ninguna sesión — desde el PC o desde el celular/cloud — mezcle
-credenciales, repos o despliegues entre ambos.
+Este proyecto (repo `CabrasGO`, deploy local en `W:\CabrasGO`
+cuando corre en el PC) tiene su propio ecosistema de cuentas, **completamente
+separado del de cualquier otro proyecto**. Esta skill existe para que ninguna
+sesión — desde el PC o desde el celular/cloud — mezcle credenciales, repos o
+despliegues entre proyectos distintos.
 
 ## REGLA 0 — Mapa de cuentas (leer antes de tocar git/deploy)
 
 | Recurso | Cuenta / identidad | Detalle |
 |---|---|---|
-| GitHub — deploy (fuente de verdad) | `alejandrog45@gmail.com` | Fork `alejandrog45-svg/CabrasGO`, rama `main`. Remote local: `alejandro`. **Único remoto al que se hace push.** |
-| GitHub — original (solo lectura) | `ferreteriaoviedo.elmanzano@gmail.com` | `oviedoem/CabrasGO`, remote local: `origin`. **NUNCA hacer push acá** — es upstream de referencia, no el deploy. |
+| GitHub — deploy (único remoto) | `alejandrog45@gmail.com` | `alejandrog45-svg/CabrasGO`, rama `main`. Remote local: `origin`. **Push directo acá.** (Post-migración 2026-09-23: ya no hay remoto separado de solo-lectura, el historial se reescribió y quedó un único remoto propio.) |
 | Firebase Hosting | `alejandrog45@gmail.com` | Proyecto `cabrasgo` → sirve `cabrasgo.web.app` desde `frontend/dist`. |
-| Railway | `alejandrog45@gmail.com` | Proyecto `cabrasgo-backend`, conectado por GitHub al fork `alejandrog45-svg/CabrasGO` — todo push a `main` ahí redeploya el backend solo. |
+| Railway | `alejandrog45@gmail.com` | Proyecto `cabrasgo-backend`, conectado por GitHub al repo `alejandrog45-svg/CabrasGO` — todo push a `main` ahí redeploya el backend solo. |
 
-**Esto es 100% distinto** de las cuentas de Ferretería Oviedo (`E:\ferreteria-oviedo`,
-`E:\git-sync`, `GIT_CONFIG_GLOBAL=E:\config\gitconfig`). Nunca copiar rutas,
-tokens o config de un proyecto al otro.
+**Esto es un ecosistema de cuentas 100% separado de cualquier otro proyecto**
+(otro proyecto = otra cuenta, otro `git remote`, otra config). Nunca copiar
+rutas, tokens o config de un proyecto a otro.
 
 ### Verificación obligatoria antes de cualquier `git push` o deploy
 
@@ -39,12 +38,12 @@ firebase projects:list 2>&1 | head -5  # si firebase CLI está disponible
 
 Si `gh auth status` o `firebase` muestran una cuenta que no es
 `alejandrog45@gmail.com`, **PARAR y avisar al usuario** — no intentar
-cambiar de cuenta ni pushear igual. Nunca usar `origin` para push.
+cambiar de cuenta ni pushear igual.
 
 ## REGLA 1 — Al iniciar sesión (en este orden, sin releer de más)
 
-1. **Si la sesión corre en el PC** (existe `E:\CabrasGO-deploy\`), leer
-   **`E:\CabrasGO-deploy\flujo-proyecto-cabrasgo.html`** — estado completo:
+1. **Si la sesión corre en el PC** (existe `W:\CabrasGO\`), leer
+   **`W:\CabrasGO\flujo-proyecto-cabrasgo.html`** — estado completo:
    cuentas, URLs, línea de tiempo, pendientes/bloqueados. Es la fuente de
    verdad de sesión a sesión, vive solo local, no va a git, así que **no
    existe en sesiones de celular/cloud** — en esas, `CLAUDE.md` (punto 2) es
@@ -93,13 +92,13 @@ cambiar de cuenta ni pushear igual. Nunca usar `origin` para push.
 ## REGLA 4 — Al cerrar sesión (checklist, en orden)
 
 1. `git status --short` → debe quedar limpio (todo commiteado y pusheado a
-   `alejandro main`, nunca a `origin`).
+   `origin main`, único remoto).
 2. Confirmar que no quedan servidores de prueba colgados (`netstat -ano |
    grep -E ":5173|:8080"` en PC) — matar por PID si algo quedó vivo.
 3. Si se envió algo a producción en la sesión: actualizar **`CLAUDE.md`**
    (raíz del repo) si cambió arquitectura/comportamiento de negocio —
    commitear junto con el código. Si la sesión corre en el PC, actualizar
-   también **`E:\CabrasGO-deploy\flujo-proyecto-cabrasgo.html`** (nuevo paso
+   también **`W:\CabrasGO\flujo-proyecto-cabrasgo.html`** (nuevo paso
    en la línea de tiempo) — se queda local, no va a git.
 4. Confirmar al usuario en una línea: qué quedó en producción, qué falta, y
    las URLs vigentes (`cabrasgo.web.app`, backend de Railway).
